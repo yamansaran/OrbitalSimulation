@@ -25,10 +25,21 @@ public class OrbitalSimulation extends JFrame {
     private static final int WINDOW_HEIGHT = 800;
     private static final int CONTROL_PANEL_HEIGHT = 280;
     
-    // Physical constants for Earth and orbital mechanics
-    private static final double EARTH_RADIUS = 6371000; // Earth's radius in meters
-    private static final double G = 6.67430e-11; // Gravitational constant in m³/kg⋅s²
-    private static final double EARTH_MASS = 5.972e24; // Earth's mass in kg
+    // Physical constants for Earth and orbital mechanics (now configurable)
+    private double earthRadius = 6371000; // Earth's radius in meters
+    private double gravitationalConstant = 6.67430e-11; // Gravitational constant in m³/kg⋅s²
+    private double earthMass = 5.972e24; // Earth's mass in kg
+    
+    // Display constants (now configurable)
+    private double baseScale = 5e-6; // Base scale factor for converting meters to pixels
+    private int maxTrailLength = 500; // Maximum trail points
+    private Color earthColor = new Color(100, 149, 237); // Earth body color
+    private Color earthOutlineColor = new Color(34, 139, 34); // Earth outline color
+    private Color satelliteColor = Color.RED; // Satellite color
+    private Color trailColor = new Color(255, 255, 0, 100); // Trail color (semi-transparent yellow)
+    private Color orbitColor = new Color(255, 255, 255, 80); // Orbit path color
+    private int satelliteSize = 4; // Base satellite size in pixels
+    private int animationDelay = 50; // Animation timer delay in milliseconds
     
     // GUI components for simulation display and animation control
     private SimulationPanel simulationPanel; // Custom panel for drawing the orbital simulation
@@ -74,6 +85,9 @@ public class OrbitalSimulation extends JFrame {
     private void initializeComponents() {
         setLayout(new BorderLayout()); // Use border layout for main window
         
+        // Create menu bar with options
+        createMenuBar();
+        
         // Create and add the simulation display panel (center area)
         simulationPanel = new SimulationPanel();
         add(simulationPanel, BorderLayout.CENTER);
@@ -81,6 +95,428 @@ public class OrbitalSimulation extends JFrame {
         // Create and add the control panel (bottom area)
         JPanel controlPanel = createControlPanel();
         add(controlPanel, BorderLayout.SOUTH);
+    }
+    
+    /**
+     * Creates the menu bar with options menu
+     */
+    private void createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        
+        // Options menu
+        JMenu optionsMenu = new JMenu("Options");
+        
+        // Orbital Parameters submenu
+        JMenuItem orbitalParamsItem = new JMenuItem("Orbital Parameters...");
+        orbitalParamsItem.addActionListener(e -> showOrbitalParametersDialog());
+        optionsMenu.add(orbitalParamsItem);
+        
+        // Physical Constants submenu
+        JMenuItem physicalConstantsItem = new JMenuItem("Physical Constants...");
+        physicalConstantsItem.addActionListener(e -> showPhysicalConstantsDialog());
+        optionsMenu.add(physicalConstantsItem);
+        
+        // Display Settings submenu
+        JMenuItem displaySettingsItem = new JMenuItem("Display Settings...");
+        displaySettingsItem.addActionListener(e -> showDisplaySettingsDialog());
+        optionsMenu.add(displaySettingsItem);
+        
+        optionsMenu.addSeparator();
+        
+        // Reset to Defaults option
+        JMenuItem resetDefaultsItem = new JMenuItem("Reset to Defaults");
+        resetDefaultsItem.addActionListener(e -> resetToDefaults());
+        optionsMenu.add(resetDefaultsItem);
+        
+        menuBar.add(optionsMenu);
+        setJMenuBar(menuBar);
+    }
+    
+    /**
+     * Shows the orbital parameters configuration dialog
+     */
+    private void showOrbitalParametersDialog() {
+        JDialog dialog = new JDialog(this, "Orbital Parameters", true);
+        dialog.setSize(400, 300);
+        dialog.setLocationRelativeTo(this);
+        
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        // Create input fields for orbital parameters
+        JTextField smaField = new JTextField(String.valueOf(semiMajorAxis / 1000), 10);
+        JTextField eccField = new JTextField(String.valueOf(eccentricity), 10);
+        JTextField incField = new JTextField(String.valueOf(inclination), 10);
+        JTextField argPeriField = new JTextField(String.valueOf(argumentOfPeriapsis), 10);
+        JTextField lanField = new JTextField(String.valueOf(longitudeOfAscendingNode), 10);
+        JTextField anomalyField = new JTextField(String.valueOf(trueAnomaly), 10);
+        
+        // Add components to dialog
+        gbc.gridy = 0;
+        gbc.gridx = 0; panel.add(new JLabel("Semi-major axis (km):"), gbc);
+        gbc.gridx = 1; panel.add(smaField, gbc);
+        
+        gbc.gridy = 1;
+        gbc.gridx = 0; panel.add(new JLabel("Eccentricity:"), gbc);
+        gbc.gridx = 1; panel.add(eccField, gbc);
+        
+        gbc.gridy = 2;
+        gbc.gridx = 0; panel.add(new JLabel("Inclination (°):"), gbc);
+        gbc.gridx = 1; panel.add(incField, gbc);
+        
+        gbc.gridy = 3;
+        gbc.gridx = 0; panel.add(new JLabel("Argument of Periapsis (°):"), gbc);
+        gbc.gridx = 1; panel.add(argPeriField, gbc);
+        
+        gbc.gridy = 4;
+        gbc.gridx = 0; panel.add(new JLabel("Longitude of Asc. Node (°):"), gbc);
+        gbc.gridx = 1; panel.add(lanField, gbc);
+        
+        gbc.gridy = 5;
+        gbc.gridx = 0; panel.add(new JLabel("True Anomaly (°):"), gbc);
+        gbc.gridx = 1; panel.add(anomalyField, gbc);
+        
+        // Buttons
+        JPanel buttonPanel = new JPanel();
+        JButton okButton = new JButton("OK");
+        JButton cancelButton = new JButton("Cancel");
+        
+        okButton.addActionListener(e -> {
+            try {
+                semiMajorAxis = Double.parseDouble(smaField.getText()) * 1000;
+                eccentricity = Double.parseDouble(eccField.getText());
+                inclination = Double.parseDouble(incField.getText());
+                argumentOfPeriapsis = Double.parseDouble(argPeriField.getText());
+                longitudeOfAscendingNode = Double.parseDouble(lanField.getText());
+                trueAnomaly = Double.parseDouble(anomalyField.getText());
+                createSatellite();
+                simulationPanel.repaint();
+                dialog.dispose();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Invalid input values!");
+            }
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        
+        gbc.gridy = 6;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(buttonPanel, gbc);
+        
+        dialog.add(panel);
+        dialog.setVisible(true);
+    }
+    
+    /**
+     * Shows the physical constants configuration dialog
+     */
+    private void showPhysicalConstantsDialog() {
+        JDialog dialog = new JDialog(this, "Physical Constants", true);
+        dialog.setSize(400, 250);
+        dialog.setLocationRelativeTo(this);
+        
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        // Create input fields for physical constants
+        JTextField earthRadiusField = new JTextField(String.valueOf(earthRadius / 1000), 10);
+        JTextField earthMassField = new JTextField(String.format("%.3e", earthMass), 10);
+        JTextField gravConstField = new JTextField(String.format("%.5e", gravitationalConstant), 10);
+        
+        // Add components to dialog
+        gbc.gridy = 0;
+        gbc.gridx = 0; panel.add(new JLabel("Earth Radius (km):"), gbc);
+        gbc.gridx = 1; panel.add(earthRadiusField, gbc);
+        
+        gbc.gridy = 1;
+        gbc.gridx = 0; panel.add(new JLabel("Earth Mass (kg):"), gbc);
+        gbc.gridx = 1; panel.add(earthMassField, gbc);
+        
+        gbc.gridy = 2;
+        gbc.gridx = 0; panel.add(new JLabel("Gravitational Constant:"), gbc);
+        gbc.gridx = 1; panel.add(gravConstField, gbc);
+        
+        // Add explanation labels
+        gbc.gridy = 3;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        panel.add(new JLabel("Note: Changing these values affects orbital calculations"), gbc);
+        
+        // Buttons
+        JPanel buttonPanel = new JPanel();
+        JButton okButton = new JButton("OK");
+        JButton cancelButton = new JButton("Cancel");
+        JButton resetButton = new JButton("Reset to Earth");
+        
+        okButton.addActionListener(e -> {
+            try {
+                earthRadius = Double.parseDouble(earthRadiusField.getText()) * 1000;
+                earthMass = Double.parseDouble(earthMassField.getText());
+                gravitationalConstant = Double.parseDouble(gravConstField.getText());
+                createSatellite();
+                simulationPanel.repaint();
+                dialog.dispose();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Invalid input values!");
+            }
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        resetButton.addActionListener(e -> {
+            earthRadiusField.setText("6371");
+            earthMassField.setText("5.972e24");
+            gravConstField.setText("6.67430e-11");
+        });
+        
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        buttonPanel.add(resetButton);
+        
+        gbc.gridy = 4;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(buttonPanel, gbc);
+        
+        dialog.add(panel);
+        dialog.setVisible(true);
+    }
+    
+    /**
+     * Shows the display settings configuration dialog
+     */
+    private void showDisplaySettingsDialog() {
+        JDialog dialog = new JDialog(this, "Display Settings", true);
+        dialog.setSize(450, 400);
+        dialog.setLocationRelativeTo(this);
+        
+        JTabbedPane tabbedPane = new JTabbedPane();
+        
+        // Trail Settings Tab
+        JPanel trailPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        JTextField trailLengthField = new JTextField(String.valueOf(maxTrailLength), 10);
+        JSlider trailOpacitySlider = new JSlider(0, 255, trailColor.getAlpha());
+        
+        gbc.gridy = 0;
+        gbc.gridx = 0; trailPanel.add(new JLabel("Trail Length (points):"), gbc);
+        gbc.gridx = 1; trailPanel.add(trailLengthField, gbc);
+        
+        gbc.gridy = 1;
+        gbc.gridx = 0; trailPanel.add(new JLabel("Trail Opacity:"), gbc);
+        gbc.gridx = 1; trailPanel.add(trailOpacitySlider, gbc);
+        
+        tabbedPane.add("Trail", trailPanel);
+        
+        // Colors Tab
+        JPanel colorsPanel = new JPanel(new GridBagLayout());
+        gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        JButton earthColorButton = new JButton("     ");
+        earthColorButton.setBackground(earthColor);
+        earthColorButton.addActionListener(e -> {
+            Color newColor = JColorChooser.showDialog(dialog, "Choose Earth Color", earthColor);
+            if (newColor != null) {
+                earthColor = newColor;
+                earthColorButton.setBackground(newColor);
+            }
+        });
+        
+        JButton satelliteColorButton = new JButton("     ");
+        satelliteColorButton.setBackground(satelliteColor);
+        satelliteColorButton.addActionListener(e -> {
+            Color newColor = JColorChooser.showDialog(dialog, "Choose Satellite Color", satelliteColor);
+            if (newColor != null) {
+                satelliteColor = newColor;
+                satelliteColorButton.setBackground(newColor);
+            }
+        });
+        
+        JButton trailColorButton = new JButton("     ");
+        trailColorButton.setBackground(new Color(trailColor.getRed(), trailColor.getGreen(), trailColor.getBlue()));
+        trailColorButton.addActionListener(e -> {
+            Color newColor = JColorChooser.showDialog(dialog, "Choose Trail Color", 
+                new Color(trailColor.getRed(), trailColor.getGreen(), trailColor.getBlue()));
+            if (newColor != null) {
+                trailColor = new Color(newColor.getRed(), newColor.getGreen(), newColor.getBlue(), trailColor.getAlpha());
+                trailColorButton.setBackground(newColor);
+            }
+        });
+        
+        gbc.gridy = 0;
+        gbc.gridx = 0; colorsPanel.add(new JLabel("Earth Color:"), gbc);
+        gbc.gridx = 1; colorsPanel.add(earthColorButton, gbc);
+        
+        gbc.gridy = 1;
+        gbc.gridx = 0; colorsPanel.add(new JLabel("Satellite Color:"), gbc);
+        gbc.gridx = 1; colorsPanel.add(satelliteColorButton, gbc);
+        
+        gbc.gridy = 2;
+        gbc.gridx = 0; colorsPanel.add(new JLabel("Trail Color:"), gbc);
+        gbc.gridx = 1; colorsPanel.add(trailColorButton, gbc);
+        
+        tabbedPane.add("Colors", colorsPanel);
+        
+        // Scale & Size Tab
+        JPanel scalePanel = new JPanel(new GridBagLayout());
+        gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        JTextField baseScaleField = new JTextField(String.format("%.2e", baseScale), 10);
+        JTextField satSizeField = new JTextField(String.valueOf(satelliteSize), 10);
+        JTextField animDelayField = new JTextField(String.valueOf(animationDelay), 10);
+        
+        gbc.gridy = 0;
+        gbc.gridx = 0; scalePanel.add(new JLabel("Base Scale Factor:"), gbc);
+        gbc.gridx = 1; scalePanel.add(baseScaleField, gbc);
+        
+        gbc.gridy = 1;
+        gbc.gridx = 0; scalePanel.add(new JLabel("Satellite Size (pixels):"), gbc);
+        gbc.gridx = 1; scalePanel.add(satSizeField, gbc);
+        
+        gbc.gridy = 2;
+        gbc.gridx = 0; scalePanel.add(new JLabel("Animation Delay (ms):"), gbc);
+        gbc.gridx = 1; scalePanel.add(animDelayField, gbc);
+        
+        tabbedPane.add("Scale & Size", scalePanel);
+        
+        // Buttons
+        JPanel buttonPanel = new JPanel();
+        JButton okButton = new JButton("OK");
+        JButton cancelButton = new JButton("Cancel");
+        JButton applyButton = new JButton("Apply");
+        
+        okButton.addActionListener(e -> {
+            try {
+                // Apply trail settings
+                maxTrailLength = Integer.parseInt(trailLengthField.getText());
+                trailColor = new Color(trailColor.getRed(), trailColor.getGreen(), 
+                                     trailColor.getBlue(), trailOpacitySlider.getValue());
+                
+                // Apply scale settings
+                baseScale = Double.parseDouble(baseScaleField.getText());
+                satelliteSize = Integer.parseInt(satSizeField.getText());
+                int newDelay = Integer.parseInt(animDelayField.getText());
+                if (newDelay != animationDelay) {
+                    animationDelay = newDelay;
+                    restartAnimation();
+                }
+                
+                simulationPanel.updateSettings();
+                simulationPanel.repaint();
+                dialog.dispose();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Invalid input values!");
+            }
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        applyButton.addActionListener(e -> {
+            try {
+                // Apply settings without closing dialog
+                maxTrailLength = Integer.parseInt(trailLengthField.getText());
+                trailColor = new Color(trailColor.getRed(), trailColor.getGreen(), 
+                                     trailColor.getBlue(), trailOpacitySlider.getValue());
+                baseScale = Double.parseDouble(baseScaleField.getText());
+                satelliteSize = Integer.parseInt(satSizeField.getText());
+                int newDelay = Integer.parseInt(animDelayField.getText());
+                if (newDelay != animationDelay) {
+                    animationDelay = newDelay;
+                    restartAnimation();
+                }
+                
+                simulationPanel.updateSettings();
+                simulationPanel.repaint();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Invalid input values!");
+            }
+        });
+        
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        buttonPanel.add(applyButton);
+        
+        dialog.setLayout(new BorderLayout());
+        dialog.add(tabbedPane, BorderLayout.CENTER);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        
+        dialog.setVisible(true);
+    }
+    
+    /**
+     * Resets all settings to their default values
+     */
+    private void resetToDefaults() {
+        int result = JOptionPane.showConfirmDialog(this, 
+            "Reset all settings to default values?", 
+            "Confirm Reset", 
+            JOptionPane.YES_NO_OPTION);
+        
+        if (result == JOptionPane.YES_OPTION) {
+            // Reset physical constants
+            earthRadius = 6371000;
+            gravitationalConstant = 6.67430e-11;
+            earthMass = 5.972e24;
+            
+            // Reset orbital parameters
+            semiMajorAxis = 7000000;
+            eccentricity = 0.1;
+            inclination = 0;
+            argumentOfPeriapsis = 0;
+            longitudeOfAscendingNode = 0;
+            trueAnomaly = 0;
+            
+            // Reset display settings
+            baseScale = 5e-6;
+            maxTrailLength = 500;
+            earthColor = new Color(100, 149, 237);
+            earthOutlineColor = new Color(34, 139, 34);
+            satelliteColor = Color.RED;
+            trailColor = new Color(255, 255, 0, 100);
+            orbitColor = new Color(255, 255, 255, 80);
+            satelliteSize = 4;
+            animationDelay = 50;
+            
+            // Reset animation
+            timeMultiplier = 1.0;
+            useEquinoctialElements = false;
+            
+            // Update simulation
+            createSatellite();
+            simulationPanel.updateSettings();
+            simulationPanel.clearTrail();
+            simulationPanel.resetZoom();
+            restartAnimation();
+            
+            JOptionPane.showMessageDialog(this, "Settings reset to defaults.");
+        }
+    }
+    
+    /**
+     * Restarts the animation timer with current delay setting
+     */
+    private void restartAnimation() {
+        if (animationTimer != null) {
+            animationTimer.stop();
+        }
+        startAnimation();
     }
     
     /**
@@ -568,10 +1004,10 @@ public class OrbitalSimulation extends JFrame {
     
     /**
      * Starts the animation timer for smooth orbital motion display
-     * Timer fires every 50ms (20 FPS) for smooth animation
+     * Timer fires every animationDelay ms for smooth animation
      */
     private void startAnimation() {
-        animationTimer = new Timer(50, new ActionListener() {
+        animationTimer = new Timer(animationDelay, new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 if (!isPaused) {
                     // Update satellite position with time step scaled by speed multiplier
@@ -589,9 +1025,6 @@ public class OrbitalSimulation extends JFrame {
      * Handles zooming, panning, and drawing all visual elements
      */
     private class SimulationPanel extends JPanel {
-        // Base scale factor for converting meters to pixels
-        private static final double BASE_SCALE = 5e-6; // 1 meter = 5×10⁻⁶ pixels
-        
         // Zoom and pan state variables
         private double zoomFactor = 1.0; // Current zoom level (1.0 = default)
         private double offsetX = 0; // Horizontal pan offset
@@ -599,7 +1032,6 @@ public class OrbitalSimulation extends JFrame {
         
         // Satellite trail for showing recent orbital path
         private List<Point> trail = new ArrayList<>();
-        private static final int MAX_TRAIL_LENGTH = 500; // Maximum trail points
         
         /**
          * Constructor: Sets up mouse controls for zoom and pan
@@ -641,6 +1073,16 @@ public class OrbitalSimulation extends JFrame {
             // Attach mouse handlers to panel
             addMouseListener(mouseHandler);
             addMouseMotionListener(mouseHandler);
+        }
+        
+        /**
+         * Updates display settings when changed in options
+         */
+        public void updateSettings() {
+            // Trim trail if it's longer than new max length
+            while (trail.size() > maxTrailLength) {
+                trail.remove(0);
+            }
         }
         
         /**
@@ -698,20 +1140,20 @@ public class OrbitalSimulation extends JFrame {
             int centerY = getHeight() / 2 + (int)(offsetY * zoomFactor);
             
             // Calculate current scale factor (base scale × zoom level)
-            double currentScale = BASE_SCALE * zoomFactor;
+            double currentScale = baseScale * zoomFactor;
             
             // DRAW EARTH: Render Earth as a blue circle at the center
-            int earthRadius = (int) (EARTH_RADIUS * currentScale); // Scale Earth radius to pixels
+            int earthRadiusPixels = (int) (earthRadius * currentScale); // Scale Earth radius to pixels
             
-            // Earth body (blue color representing oceans)
-            g2d.setColor(new Color(100, 149, 237)); // Cornflower blue
-            g2d.fillOval(centerX - earthRadius, centerY - earthRadius, 
-                        earthRadius * 2, earthRadius * 2);
+            // Earth body (configurable color)
+            g2d.setColor(earthColor);
+            g2d.fillOval(centerX - earthRadiusPixels, centerY - earthRadiusPixels, 
+                        earthRadiusPixels * 2, earthRadiusPixels * 2);
             
-            // Earth outline (green color suggesting continents)
-            g2d.setColor(new Color(34, 139, 34)); // Forest green
-            g2d.drawOval(centerX - earthRadius, centerY - earthRadius, 
-                        earthRadius * 2, earthRadius * 2);
+            // Earth outline (configurable color)
+            g2d.setColor(earthOutlineColor);
+            g2d.drawOval(centerX - earthRadiusPixels, centerY - earthRadiusPixels, 
+                        earthRadiusPixels * 2, earthRadiusPixels * 2);
             
             if (satellite != null) {
                 // DRAW ORBITAL PATH: Show the complete elliptical orbit
@@ -724,12 +1166,12 @@ public class OrbitalSimulation extends JFrame {
                 
                 // UPDATE TRAIL: Add current position to satellite trail
                 trail.add(new Point(satX, satY));
-                if (trail.size() > MAX_TRAIL_LENGTH) {
+                if (trail.size() > maxTrailLength) {
                     trail.remove(0); // Remove oldest point to maintain trail length
                 }
                 
                 // DRAW TRAIL: Show satellite's recent orbital path
-                g2d.setColor(new Color(255, 255, 0, 100)); // Semi-transparent yellow
+                g2d.setColor(trailColor);
                 g2d.setStroke(new BasicStroke((float)Math.max(1, zoomFactor))); // Scale line thickness with zoom
                 for (int i = 1; i < trail.size(); i++) {
                     Point p1 = trail.get(i - 1);
@@ -737,9 +1179,9 @@ public class OrbitalSimulation extends JFrame {
                     g2d.drawLine(p1.x, p1.y, p2.x, p2.y); // Connect consecutive trail points
                 }
                 
-                // DRAW SATELLITE: Render satellite as a red dot
-                g2d.setColor(Color.RED);
-                int satSize = (int)Math.max(4, 4 * zoomFactor); // Scale satellite size with zoom
+                // DRAW SATELLITE: Render satellite as a colored dot
+                g2d.setColor(satelliteColor);
+                int satSize = (int)Math.max(satelliteSize, satelliteSize * zoomFactor); // Scale satellite size with zoom
                 g2d.fillOval(satX - satSize/2, satY - satSize/2, satSize, satSize);
                 
                 // DRAW INFORMATION: Display orbital parameters and status
@@ -763,7 +1205,7 @@ public class OrbitalSimulation extends JFrame {
          */
         private void drawOrbit(Graphics2D g2d, int centerX, int centerY, double currentScale) {
             // Set up dashed line style for orbital path
-            g2d.setColor(new Color(255, 255, 255, 80)); // Semi-transparent white
+            g2d.setColor(orbitColor);
             g2d.setStroke(new BasicStroke((float)Math.max(1, zoomFactor/2), BasicStroke.CAP_BUTT, 
                          BasicStroke.JOIN_MITER, 10.0f, new float[]{5.0f}, 0.0f));
             
@@ -793,7 +1235,7 @@ public class OrbitalSimulation extends JFrame {
             
             // Calculate altitude: distance from Earth surface
             // √(x² + y²) gives distance from Earth center, subtract Earth radius
-            double altitude = (Math.sqrt(pos[0] * pos[0] + pos[1] * pos[1]) - EARTH_RADIUS) / 1000;
+            double altitude = (Math.sqrt(pos[0] * pos[0] + pos[1] * pos[1]) - earthRadius) / 1000;
             
             // Get current orbital velocity and period from satellite
             double velocity = satellite.getVelocity(); // m/s
@@ -814,6 +1256,141 @@ public class OrbitalSimulation extends JFrame {
         }
     }
     
+    /**
+     * Satellite class that handles orbital mechanics calculations
+     * Implements Kepler's laws and coordinate transformations
+     */
+    private class Satellite {
+        private double a, e, i, omega, Omega; // Orbital elements
+        private double nu; // True anomaly (current position)
+        private double meanMotion; // Mean motion (radians per second)
+        
+        /**
+         * Constructor: Initialize satellite with orbital elements
+         */
+        public Satellite(double semiMajorAxis, double eccentricity, double inclination,
+                        double argumentOfPeriapsis, double longitudeOfAscendingNode, double trueAnomaly) {
+            this.a = semiMajorAxis;
+            this.e = eccentricity;
+            this.i = Math.toRadians(inclination);
+            this.omega = Math.toRadians(argumentOfPeriapsis);
+            this.Omega = Math.toRadians(longitudeOfAscendingNode);
+            this.nu = Math.toRadians(trueAnomaly);
+            
+            // Calculate mean motion using Kepler's third law: n = √(μ/a³)
+            double mu = gravitationalConstant * earthMass; // Standard gravitational parameter
+            this.meanMotion = Math.sqrt(mu / (a * a * a));
+        }
+        
+        /**
+         * Updates satellite position by advancing time
+         */
+        public void updatePosition(double deltaTime) {
+            // Convert true anomaly to mean anomaly
+            double E = trueToEccentricAnomaly(nu, e); // Eccentric anomaly
+            double M = E - e * Math.sin(E); // Mean anomaly from Kepler's equation
+            
+            // Advance mean anomaly by time step
+            M += meanMotion * deltaTime;
+            
+            // Convert back to true anomaly
+            E = solveKeplersEquation(M, e); // Solve Kepler's equation iteratively
+            nu = eccentricToTrueAnomaly(E, e); // Convert to true anomaly
+        }
+        
+        /**
+         * Gets current satellite position in 2D coordinates
+         */
+        public double[] getPosition() {
+            // Calculate position in orbital plane
+            double r = a * (1 - e * e) / (1 + e * Math.cos(nu)); // Orbital radius
+            double x_orbital = r * Math.cos(nu); // X in orbital plane
+            double y_orbital = r * Math.sin(nu); // Y in orbital plane
+            
+            // Transform to Earth-centered coordinates using rotation matrices
+            // Apply argument of periapsis rotation
+            double x1 = x_orbital * Math.cos(omega) - y_orbital * Math.sin(omega);
+            double y1 = x_orbital * Math.sin(omega) + y_orbital * Math.cos(omega);
+            
+            // Apply inclination rotation
+            double x2 = x1;
+            double y2 = y1 * Math.cos(i);
+            double z2 = y1 * Math.sin(i);
+            
+            // Apply longitude of ascending node rotation
+            double x3 = x2 * Math.cos(Omega) - y2 * Math.sin(Omega);
+            double y3 = x2 * Math.sin(Omega) + y2 * Math.cos(Omega);
+            
+            return new double[]{x3, y3}; // Return 2D projection
+        }
+        
+        /**
+         * Gets current orbital velocity
+         */
+        public double getVelocity() {
+            double r = a * (1 - e * e) / (1 + e * Math.cos(nu));
+            double mu = gravitationalConstant * earthMass;
+            return Math.sqrt(mu * (2.0 / r - 1.0 / a)); // Vis-viva equation
+        }
+        
+        /**
+         * Gets orbital period in seconds
+         */
+        public double getOrbitalPeriod() {
+            return 2 * Math.PI / meanMotion;
+        }
+        
+        /**
+         * Gets current true anomaly
+         */
+        public double getTrueAnomaly() {
+            return nu;
+        }
+        
+        /**
+         * Converts true anomaly to eccentric anomaly
+         */
+        private double trueToEccentricAnomaly(double trueAnomaly, double eccentricity) {
+            double cosE = (eccentricity + Math.cos(trueAnomaly)) / (1 + eccentricity * Math.cos(trueAnomaly));
+            double sinE = Math.sqrt(1 - eccentricity * eccentricity) * Math.sin(trueAnomaly) / 
+                         (1 + eccentricity * Math.cos(trueAnomaly));
+            return Math.atan2(sinE, cosE);
+        }
+        
+        /**
+         * Converts eccentric anomaly to true anomaly
+         */
+        private double eccentricToTrueAnomaly(double eccentricAnomaly, double eccentricity) {
+            double cosNu = (Math.cos(eccentricAnomaly) - eccentricity) / (1 - eccentricity * Math.cos(eccentricAnomaly));
+            double sinNu = Math.sqrt(1 - eccentricity * eccentricity) * Math.sin(eccentricAnomaly) / 
+                          (1 - eccentricity * Math.cos(eccentricAnomaly));
+            return Math.atan2(sinNu, cosNu);
+        }
+        
+        /**
+         * Solves Kepler's equation M = E - e*sin(E) for eccentric anomaly E
+         * Uses Newton-Raphson iteration for numerical solution
+         */
+        private double solveKeplersEquation(double meanAnomaly, double eccentricity) {
+            double E = meanAnomaly; // Initial guess
+            double tolerance = 1e-10;
+            int maxIterations = 100;
+            
+            for (int i = 0; i < maxIterations; i++) {
+                double f = E - eccentricity * Math.sin(E) - meanAnomaly; // Function
+                double fp = 1 - eccentricity * Math.cos(E); // Derivative
+                double deltaE = f / fp; // Newton-Raphson step
+                E -= deltaE;
+                
+                if (Math.abs(deltaE) < tolerance) {
+                    break; // Converged
+                }
+            }
+            
+            return E;
+        }
+    }
+    
     public static void main(String[] args) {
         SwingUtilities.invokeLater(new Runnable() {
             public void run() {
@@ -821,5 +1398,4 @@ public class OrbitalSimulation extends JFrame {
             }
         });
     }
-    
 }
