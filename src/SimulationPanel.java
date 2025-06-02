@@ -2,6 +2,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
+import java.awt.image.BufferedImage;
 import java.util.*;
 import java.util.List;
 
@@ -134,18 +135,33 @@ public class SimulationPanel extends JPanel {
         // Calculate current scale factor (base scale × zoom level)
         double currentScale = simulation.getBaseScale() * zoomFactor;
         
-        // DRAW EARTH: Render Earth as a blue circle at the center
-        int earthRadiusPixels = (int) (simulation.getEarthRadius() * currentScale); // Scale Earth radius to pixels
+        // DRAW CELESTIAL BODY: Render the celestial body (Earth, etc.) at the center
+        int bodyRadiusPixels = (int) (simulation.getEarthRadius() * currentScale); // Scale radius to pixels
         
-        // Earth body (configurable color)
-        g2d.setColor(simulation.getEarthColor());
-        g2d.fillOval(centerX - earthRadiusPixels, centerY - earthRadiusPixels, 
-                    earthRadiusPixels * 2, earthRadiusPixels * 2);
-        
-        // Earth outline (configurable color)
-        g2d.setColor(simulation.getEarthOutlineColor());
-        g2d.drawOval(centerX - earthRadiusPixels, centerY - earthRadiusPixels, 
-                    earthRadiusPixels * 2, earthRadiusPixels * 2);
+        BufferedImage bodyImage = simulation.getCelestialBodyImage();
+        if (bodyImage != null) {
+            // Draw the celestial body image
+            int imageSize = bodyRadiusPixels * 2;
+            g2d.drawImage(bodyImage, centerX - bodyRadiusPixels, centerY - bodyRadiusPixels, 
+                         imageSize, imageSize, null);
+            
+            // Optional: Add a subtle outline
+            g2d.setColor(simulation.getEarthOutlineColor());
+            g2d.setStroke(new BasicStroke(1.0f));
+            g2d.drawOval(centerX - bodyRadiusPixels, centerY - bodyRadiusPixels, 
+                        imageSize, imageSize);
+        } else {
+            // Fallback: Draw colored circle if no image is available
+            // Body fill (configurable color)
+            g2d.setColor(simulation.getEarthColor());
+            g2d.fillOval(centerX - bodyRadiusPixels, centerY - bodyRadiusPixels, 
+                        bodyRadiusPixels * 2, bodyRadiusPixels * 2);
+            
+            // Body outline (configurable color)
+            g2d.setColor(simulation.getEarthOutlineColor());
+            g2d.drawOval(centerX - bodyRadiusPixels, centerY - bodyRadiusPixels, 
+                        bodyRadiusPixels * 2, bodyRadiusPixels * 2);
+        }
         
         Satellite satellite = simulation.getSatellite();
         if (satellite != null) {
@@ -172,10 +188,19 @@ public class SimulationPanel extends JPanel {
                 g2d.drawLine(p1.x, p1.y, p2.x, p2.y); // Connect consecutive trail points
             }
             
-            // DRAW SATELLITE: Render satellite as a colored dot
-            g2d.setColor(simulation.getSatelliteColor());
-            int satSize = (int)Math.max(simulation.getSatelliteSize(), simulation.getSatelliteSize() * zoomFactor); // Scale satellite size with zoom
-            g2d.fillOval(satX - satSize/2, satY - satSize/2, satSize, satSize);
+            // DRAW SATELLITE: Render satellite as an image or colored dot
+            BufferedImage satImage = simulation.getSatelliteImage();
+            if (satImage != null) {
+                // Draw satellite image
+                int satSize = (int)Math.max(simulation.getSatelliteSize() * 2, simulation.getSatelliteSize() * 2 * zoomFactor);
+                satSize = Math.max(satSize, 8); // Minimum size for visibility
+                g2d.drawImage(satImage, satX - satSize/2, satY - satSize/2, satSize, satSize, null);
+            } else {
+                // Fallback: Draw satellite as a colored dot
+                g2d.setColor(simulation.getSatelliteColor());
+                int satSize = (int)Math.max(simulation.getSatelliteSize(), simulation.getSatelliteSize() * zoomFactor);
+                g2d.fillOval(satX - satSize/2, satY - satSize/2, satSize, satSize);
+            }
             
             // DRAW INFORMATION: Display orbital parameters and status
             drawInfo(g2d, satellite);
@@ -208,8 +233,8 @@ public class SimulationPanel extends JPanel {
         double b = a * Math.sqrt(1 - e * e); // Semi-minor axis using b = a√(1-e²)
         double c = a * e; // Distance from center to focus using c = ae
         
-        // Create ellipse positioned with Earth at one focus (not center)
-        // Earth is located at distance 'c' from the geometric center of the ellipse
+        // Create ellipse positioned with the celestial body at one focus (not center)
+        // The celestial body is located at distance 'c' from the geometric center of the ellipse
         Ellipse2D.Double ellipse = new Ellipse2D.Double(
             centerX - a + c, centerY - b, 2 * a, 2 * b);
         g2d.draw(ellipse);
@@ -228,8 +253,8 @@ public class SimulationPanel extends JPanel {
         // Calculate current orbital parameters from satellite state
         double[] pos = satellite.getPosition();
         
-        // Calculate altitude: distance from Earth surface
-        // √(x² + y²) gives distance from Earth center, subtract Earth radius
+        // Calculate altitude: distance from celestial body surface
+        // √(x² + y²) gives distance from body center, subtract body radius
         double altitude = (Math.sqrt(pos[0] * pos[0] + pos[1] * pos[1]) - simulation.getEarthRadius()) / 1000;
         
         // Get current orbital velocity and period from satellite
@@ -238,7 +263,7 @@ public class SimulationPanel extends JPanel {
         
         // Format information strings for display
         String[] info = {
-            String.format("Altitude: %.1f km", altitude),
+            String.format("%s Altitude: %.1f km", simulation.getCurrentBody(), altitude),
             String.format("Velocity: %.2f km/s", velocity / 1000), // Convert m/s to km/s
             String.format("Period: %.2f hours", period),
             String.format("True Anomaly: %.1f°", Math.toDegrees(satellite.getTrueAnomaly()))

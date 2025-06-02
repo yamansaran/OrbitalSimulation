@@ -5,6 +5,10 @@ import javax.swing.Timer;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import javax.imageio.ImageIO;
 import java.util.*;
 import java.util.List;
 
@@ -66,6 +70,44 @@ public class OrbitalSimulation extends JFrame {
     // Auto-clear trail settings
     private boolean autoClearOnZoom = true; // Auto-clear trail when zooming
     private boolean autoClearOnUpdate = true; // Auto-clear trail when updating orbit
+    
+    // Current celestial body settings
+    private String currentBody = "Earth";
+    private BufferedImage celestialBodyImage;
+    
+    // Current satellite settings
+    private String currentSatelliteType = "Default"; // Default satellite type
+    private BufferedImage satelliteImage;
+    
+    // Available satellite types (can be expanded by adding PNG files to src folder)
+    private static final String[] SATELLITE_TYPES = {
+        "Default",      // Uses colored dot
+        "Satellite1",   // Uses Satellite1.png
+        "Satellite2",   // Uses Satellite2.png  
+        "Satellite3",   // Uses Satellite3.png
+        "ISS",          // Uses ISS.png
+        "Hubble",       // Uses Hubble.png
+        "Voyager",      // Uses Voyager.png
+        "Sputnik",       // Uses Sputnik.png
+        "Millennium Falcon" // Uses Millenium Falcon.png
+        // Add more satellite types here as needed
+    };
+    
+    // Celestial body data: name -> {radius_km, mass_kg, gravitational_constant}
+    private static final Map<String, double[]> CELESTIAL_BODIES = new HashMap<String, double[]>() {{
+        put("Sun", new double[]{696340000, 1.989e30, 6.67430e-11});
+        put("Mercury", new double[]{2439700, 3.301e23, 6.67430e-11});
+        put("Venus", new double[]{6051800, 4.867e24, 6.67430e-11});
+        put("Earth", new double[]{6371000, 5.972e24, 6.67430e-11});
+        put("Moon", new double[]{1737400, 7.342e22, 6.67430e-11});
+        put("Mars", new double[]{3389500, 6.417e23, 6.67430e-11});
+        put("Jupiter", new double[]{69911000, 1.898e27, 6.67430e-11});
+        put("Saturn", new double[]{58232000, 5.683e26, 6.67430e-11});
+        put("Uranus", new double[]{25362000, 8.681e25, 6.67430e-11});
+        put("Neptune", new double[]{24622000, 1.024e26, 6.67430e-11});
+        put("Pluto", new double[]{1188300, 1.309e22, 6.67430e-11});
+        put("Tatooine", new double[]{5232500, 3e24, 6.67430e-11}); // Diameter 10,465km -> radius 5,232.5km
+    }};
 
     // Getter methods for SimulationPanel to access private fields
     public double getBaseScale() { return baseScale; }
@@ -81,6 +123,10 @@ public class OrbitalSimulation extends JFrame {
     public double getEccentricity() { return eccentricity; }
     public Satellite getSatellite() { return satellite; }
     public boolean getAutoClearOnZoom() { return autoClearOnZoom; }
+    public BufferedImage getCelestialBodyImage() { return celestialBodyImage; }
+    public String getCurrentBody() { return currentBody; }
+    public BufferedImage getSatelliteImage() { return satelliteImage; }
+    public String getCurrentSatelliteType() { return currentSatelliteType; }
 
     /**
      * Constructor: Sets up the main window and initializes all components
@@ -94,6 +140,8 @@ public class OrbitalSimulation extends JFrame {
         
         // Initialize GUI components and create initial satellite
         initializeComponents();
+        loadCelestialBodyImage();
+        loadSatelliteImage();
         createSatellite();
         startAnimation();
     }
@@ -116,8 +164,7 @@ public class OrbitalSimulation extends JFrame {
         add(controlPanel, BorderLayout.SOUTH);
     }
     
-  
-    
+   
     /**
      * Creates the menu bar with options menu
      */
@@ -146,6 +193,16 @@ public class OrbitalSimulation extends JFrame {
         JMenuItem trailSettingsItem = new JMenuItem("Trail Settings...");
         trailSettingsItem.addActionListener(e -> showTrailSettingsDialog());
         optionsMenu.add(trailSettingsItem);
+        
+        // Celestial Body submenu
+        JMenuItem celestialBodyItem = new JMenuItem("Select Celestial Body...");
+        celestialBodyItem.addActionListener(e -> showCelestialBodyDialog());
+        optionsMenu.add(celestialBodyItem);
+        
+        // Satellite Type submenu
+        JMenuItem satelliteTypeItem = new JMenuItem("Select Satellite Type...");
+        satelliteTypeItem.addActionListener(e -> showSatelliteTypeDialog());
+        optionsMenu.add(satelliteTypeItem);
         
         optionsMenu.addSeparator();
         
@@ -238,6 +295,269 @@ public class OrbitalSimulation extends JFrame {
         
         dialog.add(panel);
         dialog.setVisible(true);
+    }
+    
+    /**
+     * Shows the satellite type selection dialog
+     */
+    private void showSatelliteTypeDialog() {
+        JDialog dialog = new JDialog(this, "Select Satellite Type", true);
+        dialog.setSize(450, 300);
+        dialog.setLocationRelativeTo(this);
+        
+        JPanel panel = new JPanel(new BorderLayout());
+        
+        // Create list of satellite types
+        JList<String> satelliteList = new JList<>(SATELLITE_TYPES);
+        satelliteList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        satelliteList.setSelectedValue(currentSatelliteType, true);
+        
+        JScrollPane scrollPane = new JScrollPane(satelliteList);
+        panel.add(scrollPane, BorderLayout.CENTER);
+        
+        // Info panel
+        JTextArea infoArea = new JTextArea(6, 35);
+        infoArea.setEditable(false);
+        infoArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        JScrollPane infoScroll = new JScrollPane(infoArea);
+        panel.add(infoScroll, BorderLayout.SOUTH);
+        
+        // Update info when selection changes
+        satelliteList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                String selected = satelliteList.getSelectedValue();
+                if (selected != null) {
+                    if (selected.equals("Default")) {
+                        infoArea.setText("Selected: " + selected + "\n" +
+                                       "Type: Colored dot (no image file)\n" +
+                                       "Description: Simple colored circle\n" +
+                                       "File: None required");
+                    } else {
+                        String imagePath = "src/" + selected + ".png";
+                        File imageFile = new File(imagePath);
+                        boolean exists = imageFile.exists();
+                        
+                        infoArea.setText("Selected: " + selected + "\n" +
+                                       "Image file: " + selected + ".png\n" +
+                                       "Full path: " + imagePath + "\n" +
+                                       "File exists: " + (exists ? "Yes" : "No") + "\n" +
+                                       (exists ? "Ready to use!" : "File not found - will use colored dot"));
+                    }
+                }
+            }
+        });
+        
+        // Trigger initial info display
+        if (satelliteList.getSelectedValue() != null) {
+            satelliteList.getListSelectionListeners()[0].valueChanged(
+                new javax.swing.event.ListSelectionEvent(satelliteList, 0, 0, false));
+        }
+        
+        // Buttons
+        JPanel buttonPanel = new JPanel();
+        JButton okButton = new JButton("OK");
+        JButton cancelButton = new JButton("Cancel");
+        JButton addCustomButton = new JButton("Add Custom...");
+        
+        okButton.addActionListener(e -> {
+            String selected = satelliteList.getSelectedValue();
+            if (selected != null) {
+                setSatelliteType(selected);
+            }
+            dialog.dispose();
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        addCustomButton.addActionListener(e -> {
+            String customName = JOptionPane.showInputDialog(dialog, 
+                "Enter satellite name (without .png extension):", 
+                "Add Custom Satellite", 
+                JOptionPane.PLAIN_MESSAGE);
+            if (customName != null && !customName.trim().isEmpty()) {
+                // Add to the list temporarily (for this session only)
+                String[] newTypes = new String[SATELLITE_TYPES.length + 1];
+                System.arraycopy(SATELLITE_TYPES, 0, newTypes, 0, SATELLITE_TYPES.length);
+                newTypes[SATELLITE_TYPES.length] = customName.trim();
+                
+                satelliteList.setListData(newTypes);
+                satelliteList.setSelectedValue(customName.trim(), true);
+            }
+        });
+        
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        buttonPanel.add(addCustomButton);
+        panel.add(buttonPanel, BorderLayout.NORTH);
+        
+        dialog.add(panel);
+        dialog.setVisible(true);
+    }
+    
+    /**
+     * Sets the current satellite type and loads the corresponding image
+     */
+    private void setSatelliteType(String satelliteType) {
+        currentSatelliteType = satelliteType;
+        loadSatelliteImage();
+        simulationPanel.repaint();
+    }
+    
+    /**
+     * Loads the image for the current satellite type
+     */
+    private void loadSatelliteImage() {
+        if (currentSatelliteType.equals("Default")) {
+            // Use colored dot for default type
+            satelliteImage = null;
+            return;
+        }
+        
+        try {
+            String imagePath = "src/" + currentSatelliteType + ".png";
+            File imageFile = new File(imagePath);
+            if (imageFile.exists()) {
+                satelliteImage = ImageIO.read(imageFile);
+                System.out.println("Loaded satellite image: " + imagePath);
+            } else {
+                // If image doesn't exist, use null (will fall back to colored dot)
+                satelliteImage = null;
+                System.out.println("Satellite image not found: " + imagePath + " - using colored dot instead");
+            }
+        } catch (IOException e) {
+            satelliteImage = null;
+            System.out.println("Error loading satellite image: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Shows the celestial body selection dialog
+     */
+    private void showCelestialBodyDialog() {
+        JDialog dialog = new JDialog(this, "Select Celestial Body", true);
+        dialog.setSize(400, 300);
+        dialog.setLocationRelativeTo(this);
+        
+        JPanel panel = new JPanel(new BorderLayout());
+        
+        // Create list of celestial bodies
+        String[] bodies = CELESTIAL_BODIES.keySet().toArray(new String[0]);
+        Arrays.sort(bodies); // Sort alphabetically
+        JList<String> bodyList = new JList<>(bodies);
+        bodyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        bodyList.setSelectedValue(currentBody, true);
+        
+        JScrollPane scrollPane = new JScrollPane(bodyList);
+        panel.add(scrollPane, BorderLayout.CENTER);
+        
+        // Info panel to show body details
+        JTextArea infoArea = new JTextArea(6, 30);
+        infoArea.setEditable(false);
+        infoArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        JScrollPane infoScroll = new JScrollPane(infoArea);
+        panel.add(infoScroll, BorderLayout.SOUTH);
+        
+        // Update info when selection changes
+        bodyList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                String selected = bodyList.getSelectedValue();
+                if (selected != null) {
+                    double[] data = CELESTIAL_BODIES.get(selected);
+                    infoArea.setText(String.format(
+                        "Selected: %s\n" +
+                        "Radius: %.0f km\n" +
+                        "Mass: %.3e kg\n" +
+                        "Surface Gravity: %.2f m/s²\n" +
+                        "Escape Velocity: %.2f km/s",
+                        selected,
+                        data[0] / 1000,
+                        data[1],
+                        data[2] * data[1] / (data[0] * data[0]),
+                        Math.sqrt(2 * data[2] * data[1] / data[0]) / 1000
+                    ));
+                }
+            }
+        });
+        
+        // Trigger initial info display
+        if (bodyList.getSelectedValue() != null) {
+            bodyList.getListSelectionListeners()[0].valueChanged(
+                new javax.swing.event.ListSelectionEvent(bodyList, 0, 0, false));
+        }
+        
+        // Buttons
+        JPanel buttonPanel = new JPanel();
+        JButton okButton = new JButton("OK");
+        JButton cancelButton = new JButton("Cancel");
+        
+        okButton.addActionListener(e -> {
+            String selected = bodyList.getSelectedValue();
+            if (selected != null) {
+                setCelestialBody(selected);
+            }
+            dialog.dispose();
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        panel.add(buttonPanel, BorderLayout.NORTH);
+        
+        dialog.add(panel);
+        dialog.setVisible(true);
+    }
+    
+    /**
+     * Sets the current celestial body and updates all related parameters
+     */
+    private void setCelestialBody(String bodyName) {
+        if (CELESTIAL_BODIES.containsKey(bodyName)) {
+            currentBody = bodyName;
+            double[] data = CELESTIAL_BODIES.get(bodyName);
+            
+            // Update physical constants
+            earthRadius = data[0];
+            earthMass = data[1];
+            gravitationalConstant = data[2];
+            
+            // Load new image
+            loadCelestialBodyImage();
+            
+            // Recreate satellite with new parameters
+            createSatellite();
+            
+            // Clear trail if auto-clear is enabled
+            if (autoClearOnUpdate) {
+                simulationPanel.clearTrail();
+            }
+            
+            // Update window title
+            setTitle("Orbital Mechanics Simulation - " + bodyName);
+            
+            // Refresh display
+            simulationPanel.repaint();
+        }
+    }
+    
+    /**
+     * Loads the image for the current celestial body
+     */
+    private void loadCelestialBodyImage() {
+        try {
+            String imagePath = "src/" + currentBody + ".png";
+            File imageFile = new File(imagePath);
+            if (imageFile.exists()) {
+                celestialBodyImage = ImageIO.read(imageFile);
+            } else {
+                // If image doesn't exist, create a simple colored circle
+                celestialBodyImage = null;
+                System.out.println("Image not found: " + imagePath + " - using colored circle instead");
+            }
+        } catch (IOException e) {
+            celestialBodyImage = null;
+            System.out.println("Error loading celestial body image: " + e.getMessage());
+        }
     }
     
     /**
@@ -576,6 +896,12 @@ public class OrbitalSimulation extends JFrame {
             useEquinoctialElements = false;
             autoClearOnZoom = true;
             autoClearOnUpdate = true;
+            
+            // Reset to Earth
+            setCelestialBody("Earth");
+            
+            // Reset satellite type
+            setSatelliteType("Default");
             
             // Update simulation
             createSatellite();
