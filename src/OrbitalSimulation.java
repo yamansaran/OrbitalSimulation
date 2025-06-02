@@ -9,7 +9,7 @@ import java.util.*;
 import java.util.List;
 
 /**
- * Orbital Mechanics Simulation Program
+ * Orbital Mechanics Simulation Program By Yaman Saran
  * 
  * This program simulates satellite orbits around Earth using Kepler's laws and Newton's law of gravitation.
  * It supports both classical orbital elements (a, e, i, ω, Ω) and equinoctial elements (a, h, k, p, q).
@@ -62,6 +62,25 @@ public class OrbitalSimulation extends JFrame {
     // Flag to switch between classical and equinoctial element input modes
     // Equinoctial elements avoid singularities for circular/equatorial orbits
     private boolean useEquinoctialElements = false;
+    
+    // Auto-clear trail settings
+    private boolean autoClearOnZoom = true; // Auto-clear trail when zooming
+    private boolean autoClearOnUpdate = true; // Auto-clear trail when updating orbit
+
+    // Getter methods for SimulationPanel to access private fields
+    public double getBaseScale() { return baseScale; }
+    public double getEarthRadius() { return earthRadius; }
+    public Color getEarthColor() { return earthColor; }
+    public Color getEarthOutlineColor() { return earthOutlineColor; }
+    public Color getSatelliteColor() { return satelliteColor; }
+    public Color getTrailColor() { return trailColor; }
+    public Color getOrbitColor() { return orbitColor; }
+    public int getSatelliteSize() { return satelliteSize; }
+    public int getMaxTrailLength() { return maxTrailLength; }
+    public double getSemiMajorAxis() { return semiMajorAxis; }
+    public double getEccentricity() { return eccentricity; }
+    public Satellite getSatellite() { return satellite; }
+    public boolean getAutoClearOnZoom() { return autoClearOnZoom; }
 
     /**
      * Constructor: Sets up the main window and initializes all components
@@ -89,13 +108,15 @@ public class OrbitalSimulation extends JFrame {
         createMenuBar();
         
         // Create and add the simulation display panel (center area)
-        simulationPanel = new SimulationPanel();
+        simulationPanel = new SimulationPanel(this);
         add(simulationPanel, BorderLayout.CENTER);
         
         // Create and add the control panel (bottom area)
         JPanel controlPanel = createControlPanel();
         add(controlPanel, BorderLayout.SOUTH);
     }
+    
+  
     
     /**
      * Creates the menu bar with options menu
@@ -120,6 +141,11 @@ public class OrbitalSimulation extends JFrame {
         JMenuItem displaySettingsItem = new JMenuItem("Display Settings...");
         displaySettingsItem.addActionListener(e -> showDisplaySettingsDialog());
         optionsMenu.add(displaySettingsItem);
+        
+        // Trail Settings submenu
+        JMenuItem trailSettingsItem = new JMenuItem("Trail Settings...");
+        trailSettingsItem.addActionListener(e -> showTrailSettingsDialog());
+        optionsMenu.add(trailSettingsItem);
         
         optionsMenu.addSeparator();
         
@@ -205,6 +231,57 @@ public class OrbitalSimulation extends JFrame {
         buttonPanel.add(cancelButton);
         
         gbc.gridy = 6;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(buttonPanel, gbc);
+        
+        dialog.add(panel);
+        dialog.setVisible(true);
+    }
+    
+    /**
+     * Shows the trail settings configuration dialog
+     */
+    private void showTrailSettingsDialog() {
+        JDialog dialog = new JDialog(this, "Trail Settings", true);
+        dialog.setSize(350, 200);
+        dialog.setLocationRelativeTo(this);
+        
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        // Auto-clear trail options
+        JCheckBox autoClearZoomBox = new JCheckBox("Auto-clear trail when zooming", autoClearOnZoom);
+        JCheckBox autoClearUpdateBox = new JCheckBox("Auto-clear trail when updating orbit", autoClearOnUpdate);
+        
+        gbc.gridy = 0;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        panel.add(autoClearZoomBox, gbc);
+        
+        gbc.gridy = 1;
+        panel.add(autoClearUpdateBox, gbc);
+        
+        // Buttons
+        JPanel buttonPanel = new JPanel();
+        JButton okButton = new JButton("OK");
+        JButton cancelButton = new JButton("Cancel");
+        
+        okButton.addActionListener(e -> {
+            autoClearOnZoom = autoClearZoomBox.isSelected();
+            autoClearOnUpdate = autoClearUpdateBox.isSelected();
+            dialog.dispose();
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        
+        gbc.gridy = 2;
         gbc.gridx = 0;
         gbc.gridwidth = 2;
         gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -497,6 +574,8 @@ public class OrbitalSimulation extends JFrame {
             // Reset animation
             timeMultiplier = 1.0;
             useEquinoctialElements = false;
+            autoClearOnZoom = true;
+            autoClearOnUpdate = true;
             
             // Update simulation
             createSatellite();
@@ -633,8 +712,13 @@ public class OrbitalSimulation extends JFrame {
         resetButton.setPreferredSize(new Dimension(80, 30));
         panel.add(resetButton, gbc);
         
-        // Display current time speed multiplier
         gbc.gridx = 7;
+        JButton clearTrailButton = new JButton("Clear Trail");
+        clearTrailButton.setPreferredSize(new Dimension(90, 30));
+        panel.add(clearTrailButton, gbc);
+
+        // Display current time speed multiplier
+        gbc.gridx = 8;
         JLabel speedLabel = new JLabel("1x");
         speedLabel.setPreferredSize(new Dimension(40, 25));
         panel.add(speedLabel, gbc);
@@ -706,6 +790,9 @@ public class OrbitalSimulation extends JFrame {
                     }
                     // Create new satellite with updated parameters and refresh display
                     createSatellite();
+                    if (autoClearOnUpdate) {
+                        simulationPanel.clearTrail();
+                    }
                     simulationPanel.repaint();
                 } catch (NumberFormatException ex) {
                     // Handle invalid input with user-friendly error message
@@ -795,6 +882,16 @@ public class OrbitalSimulation extends JFrame {
             }
         });
         
+        /**
+         * Clear Trail Button: Manually clears the satellite trail
+         */
+        clearTrailButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                simulationPanel.clearTrail(); // Clear the orbital trail display
+                simulationPanel.repaint(); // Refresh the display
+            }
+        });
+        
         // ZOOM CONTROL EVENT LISTENERS
         
         /**
@@ -803,6 +900,9 @@ public class OrbitalSimulation extends JFrame {
         zoomInButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 simulationPanel.zoomIn();
+                if (autoClearOnZoom) {
+                    simulationPanel.clearTrail();
+                }
                 zoomLabel.setText(String.format("%.1fx", simulationPanel.getZoomFactor()));
             }
         });
@@ -813,6 +913,9 @@ public class OrbitalSimulation extends JFrame {
         zoomOutButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 simulationPanel.zoomOut();
+                if (autoClearOnZoom) {
+                    simulationPanel.clearTrail();
+                }
                 zoomLabel.setText(String.format("%.1fx", simulationPanel.getZoomFactor()));
             }
         });
@@ -999,7 +1102,8 @@ public class OrbitalSimulation extends JFrame {
      */
     private void createSatellite() {
         satellite = new Satellite(semiMajorAxis, eccentricity, inclination, 
-                                argumentOfPeriapsis, longitudeOfAscendingNode, trueAnomaly);
+                                argumentOfPeriapsis, longitudeOfAscendingNode, trueAnomaly,
+                                gravitationalConstant, earthMass);
     }
     
     /**
@@ -1018,377 +1122,6 @@ public class OrbitalSimulation extends JFrame {
             }
         });
         animationTimer.start(); // Begin animation loop
-    }
-    
-    /**
-     * Custom JPanel for rendering the orbital simulation
-     * Handles zooming, panning, and drawing all visual elements
-     */
-    private class SimulationPanel extends JPanel {
-        // Zoom and pan state variables
-        private double zoomFactor = 1.0; // Current zoom level (1.0 = default)
-        private double offsetX = 0; // Horizontal pan offset
-        private double offsetY = 0; // Vertical pan offset
-        
-        // Satellite trail for showing recent orbital path
-        private List<Point> trail = new ArrayList<>();
-        
-        /**
-         * Constructor: Sets up mouse controls for zoom and pan
-         */
-        public SimulationPanel() {
-            setBackground(Color.BLACK); // Space background
-            
-            // Mouse wheel listener for zooming functionality
-            addMouseWheelListener(new MouseWheelListener() {
-                public void mouseWheelMoved(MouseWheelEvent e) {
-                    if (e.getWheelRotation() < 0) {
-                        zoomIn(); // Scroll up = zoom in
-                    } else {
-                        zoomOut(); // Scroll down = zoom out
-                    }
-                    repaint(); // Update display immediately
-                }
-            });
-            
-            // Mouse listeners for click-and-drag panning
-            MouseAdapter mouseHandler = new MouseAdapter() {
-                private Point lastPanPoint; // Last mouse position for drag calculation
-                
-                // Record initial mouse position when dragging starts
-                public void mousePressed(MouseEvent e) {
-                    lastPanPoint = e.getPoint();
-                }
-                
-                // Update pan offset based on mouse movement
-                public void mouseDragged(MouseEvent e) {
-                    if (lastPanPoint != null) {
-                        Point currentPoint = e.getPoint();
-                        lastPanPoint = currentPoint;
-                        repaint(); // Update display during drag
-                    }
-                }
-            };
-            
-            // Attach mouse handlers to panel
-            addMouseListener(mouseHandler);
-            addMouseMotionListener(mouseHandler);
-        }
-        
-        /**
-         * Updates display settings when changed in options
-         */
-        public void updateSettings() {
-            // Trim trail if it's longer than new max length
-            while (trail.size() > maxTrailLength) {
-                trail.remove(0);
-            }
-        }
-        
-        /**
-         * Increases zoom level by factor of 1.5, with maximum limit of 50x
-         */
-        public void zoomIn() {
-            zoomFactor *= 1.5;
-            if (zoomFactor > 50.0) zoomFactor = 50.0; // Prevent excessive zoom
-        }
-        
-        /**
-         * Decreases zoom level by factor of 1.5, with minimum limit of 0.1x
-         */
-        public void zoomOut() {
-            zoomFactor /= 1.5;
-            if (zoomFactor < 0.1) zoomFactor = 0.1; // Prevent negative/zero zoom
-        }
-        
-        /**
-         * Resets zoom to default level and centers the view
-         */
-        public void resetZoom() {
-            zoomFactor = 1.0;
-            offsetX = 0;
-            offsetY = 0;
-            repaint();
-        }
-        
-        /**
-         * Returns current zoom factor for display purposes
-         */
-        public double getZoomFactor() {
-            return zoomFactor;
-        }
-        
-        /**
-         * Clears the satellite trail (used when resetting simulation)
-         */
-        public void clearTrail() {
-            trail.clear();
-        }
-        
-        /**
-         * Main rendering method - draws all visual elements of the simulation
-         * Called automatically by Swing whenever the panel needs to be redrawn
-         */
-        @Override
-        protected void paintComponent(Graphics g) {
-            super.paintComponent(g); // Clear previous frame
-            Graphics2D g2d = (Graphics2D) g; // Use Graphics2D for advanced rendering
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            
-            // Calculate screen center with pan offset applied
-            int centerX = getWidth() / 2 + (int)(offsetX * zoomFactor);
-            int centerY = getHeight() / 2 + (int)(offsetY * zoomFactor);
-            
-            // Calculate current scale factor (base scale × zoom level)
-            double currentScale = baseScale * zoomFactor;
-            
-            // DRAW EARTH: Render Earth as a blue circle at the center
-            int earthRadiusPixels = (int) (earthRadius * currentScale); // Scale Earth radius to pixels
-            
-            // Earth body (configurable color)
-            g2d.setColor(earthColor);
-            g2d.fillOval(centerX - earthRadiusPixels, centerY - earthRadiusPixels, 
-                        earthRadiusPixels * 2, earthRadiusPixels * 2);
-            
-            // Earth outline (configurable color)
-            g2d.setColor(earthOutlineColor);
-            g2d.drawOval(centerX - earthRadiusPixels, centerY - earthRadiusPixels, 
-                        earthRadiusPixels * 2, earthRadiusPixels * 2);
-            
-            if (satellite != null) {
-                // DRAW ORBITAL PATH: Show the complete elliptical orbit
-                drawOrbit(g2d, centerX, centerY, currentScale);
-                
-                // GET SATELLITE POSITION: Calculate current satellite coordinates
-                double[] pos = satellite.getPosition(); // Returns [x, y] in meters
-                int satX = centerX + (int) (pos[0] * currentScale); // Convert to screen X
-                int satY = centerY - (int) (pos[1] * currentScale); // Convert to screen Y (flip Y axis)
-                
-                // UPDATE TRAIL: Add current position to satellite trail
-                trail.add(new Point(satX, satY));
-                if (trail.size() > maxTrailLength) {
-                    trail.remove(0); // Remove oldest point to maintain trail length
-                }
-                
-                // DRAW TRAIL: Show satellite's recent orbital path
-                g2d.setColor(trailColor);
-                g2d.setStroke(new BasicStroke((float)Math.max(1, zoomFactor))); // Scale line thickness with zoom
-                for (int i = 1; i < trail.size(); i++) {
-                    Point p1 = trail.get(i - 1);
-                    Point p2 = trail.get(i);
-                    g2d.drawLine(p1.x, p1.y, p2.x, p2.y); // Connect consecutive trail points
-                }
-                
-                // DRAW SATELLITE: Render satellite as a colored dot
-                g2d.setColor(satelliteColor);
-                int satSize = (int)Math.max(satelliteSize, satelliteSize * zoomFactor); // Scale satellite size with zoom
-                g2d.fillOval(satX - satSize/2, satY - satSize/2, satSize, satSize);
-                
-                // DRAW INFORMATION: Display orbital parameters and status
-                drawInfo(g2d);
-            }
-            
-            // DRAW UI OVERLAYS: Show zoom level and controls information
-            g2d.setColor(Color.CYAN);
-            g2d.setFont(new Font("Arial", Font.PLAIN, 12));
-            g2d.drawString(String.format("Zoom: %.1fx", zoomFactor), getWidth() - 100, 20);
-            g2d.drawString("Mouse wheel: zoom, drag: pan", getWidth() - 200, getHeight() - 10);
-        }
-        
-        /**
-         * Draws the complete orbital ellipse as a dashed white line
-         * 
-         * @param g2d Graphics context for drawing
-         * @param centerX Screen X coordinate of Earth's center
-         * @param centerY Screen Y coordinate of Earth's center  
-         * @param currentScale Current meter-to-pixel conversion factor
-         */
-        private void drawOrbit(Graphics2D g2d, int centerX, int centerY, double currentScale) {
-            // Set up dashed line style for orbital path
-            g2d.setColor(orbitColor);
-            g2d.setStroke(new BasicStroke((float)Math.max(1, zoomFactor/2), BasicStroke.CAP_BUTT, 
-                         BasicStroke.JOIN_MITER, 10.0f, new float[]{5.0f}, 0.0f));
-            
-            // Calculate ellipse parameters from orbital elements
-            double a = semiMajorAxis * currentScale; // Semi-major axis in pixels
-            double b = a * Math.sqrt(1 - eccentricity * eccentricity); // Semi-minor axis using b = a√(1-e²)
-            double c = a * eccentricity; // Distance from center to focus using c = ae
-            
-            // Create ellipse positioned with Earth at one focus (not center)
-            // Earth is located at distance 'c' from the geometric center of the ellipse
-            Ellipse2D.Double ellipse = new Ellipse2D.Double(
-                centerX - a + c, centerY - b, 2 * a, 2 * b);
-            g2d.draw(ellipse);
-        }
-        
-        /**
-         * Draws real-time orbital information as text overlay
-         * 
-         * @param g2d Graphics context for text rendering
-         */
-        private void drawInfo(Graphics2D g2d) {
-            g2d.setColor(Color.WHITE);
-            g2d.setFont(new Font("Arial", Font.PLAIN, 12));
-            
-            // Calculate current orbital parameters from satellite state
-            double[] pos = satellite.getPosition();
-            
-            // Calculate altitude: distance from Earth surface
-            // √(x² + y²) gives distance from Earth center, subtract Earth radius
-            double altitude = (Math.sqrt(pos[0] * pos[0] + pos[1] * pos[1]) - earthRadius) / 1000;
-            
-            // Get current orbital velocity and period from satellite
-            double velocity = satellite.getVelocity(); // m/s
-            double period = satellite.getOrbitalPeriod() / 3600; // Convert seconds to hours
-            
-            // Format information strings for display
-            String[] info = {
-                String.format("Altitude: %.1f km", altitude),
-                String.format("Velocity: %.2f km/s", velocity / 1000), // Convert m/s to km/s
-                String.format("Period: %.2f hours", period),
-                String.format("True Anomaly: %.1f°", Math.toDegrees(satellite.getTrueAnomaly()))
-            };
-            
-            // Draw information text in top-left corner
-            for (int i = 0; i < info.length; i++) {
-                g2d.drawString(info[i], 10, 20 + i * 15);
-            }
-        }
-    }
-    
-    /**
-     * Satellite class that handles orbital mechanics calculations
-     * Implements Kepler's laws and coordinate transformations
-     */
-    private class Satellite {
-        private double a, e, i, omega, Omega; // Orbital elements
-        private double nu; // True anomaly (current position)
-        private double meanMotion; // Mean motion (radians per second)
-        
-        /**
-         * Constructor: Initialize satellite with orbital elements
-         */
-        public Satellite(double semiMajorAxis, double eccentricity, double inclination,
-                        double argumentOfPeriapsis, double longitudeOfAscendingNode, double trueAnomaly) {
-            this.a = semiMajorAxis;
-            this.e = eccentricity;
-            this.i = Math.toRadians(inclination);
-            this.omega = Math.toRadians(argumentOfPeriapsis);
-            this.Omega = Math.toRadians(longitudeOfAscendingNode);
-            this.nu = Math.toRadians(trueAnomaly);
-            
-            // Calculate mean motion using Kepler's third law: n = √(μ/a³)
-            double mu = gravitationalConstant * earthMass; // Standard gravitational parameter
-            this.meanMotion = Math.sqrt(mu / (a * a * a));
-        }
-        
-        /**
-         * Updates satellite position by advancing time
-         */
-        public void updatePosition(double deltaTime) {
-            // Convert true anomaly to mean anomaly
-            double E = trueToEccentricAnomaly(nu, e); // Eccentric anomaly
-            double M = E - e * Math.sin(E); // Mean anomaly from Kepler's equation
-            
-            // Advance mean anomaly by time step
-            M += meanMotion * deltaTime;
-            
-            // Convert back to true anomaly
-            E = solveKeplersEquation(M, e); // Solve Kepler's equation iteratively
-            nu = eccentricToTrueAnomaly(E, e); // Convert to true anomaly
-        }
-        
-        /**
-         * Gets current satellite position in 2D coordinates
-         */
-        public double[] getPosition() {
-            // Calculate position in orbital plane
-            double r = a * (1 - e * e) / (1 + e * Math.cos(nu)); // Orbital radius
-            double x_orbital = r * Math.cos(nu); // X in orbital plane
-            double y_orbital = r * Math.sin(nu); // Y in orbital plane
-            
-            // Transform to Earth-centered coordinates using rotation matrices
-            // Apply argument of periapsis rotation
-            double x1 = x_orbital * Math.cos(omega) - y_orbital * Math.sin(omega);
-            double y1 = x_orbital * Math.sin(omega) + y_orbital * Math.cos(omega);
-            
-            // Apply inclination rotation
-            double x2 = x1;
-            double y2 = y1 * Math.cos(i);
-            double z2 = y1 * Math.sin(i);
-            
-            // Apply longitude of ascending node rotation
-            double x3 = x2 * Math.cos(Omega) - y2 * Math.sin(Omega);
-            double y3 = x2 * Math.sin(Omega) + y2 * Math.cos(Omega);
-            
-            return new double[]{x3, y3}; // Return 2D projection
-        }
-        
-        /**
-         * Gets current orbital velocity
-         */
-        public double getVelocity() {
-            double r = a * (1 - e * e) / (1 + e * Math.cos(nu));
-            double mu = gravitationalConstant * earthMass;
-            return Math.sqrt(mu * (2.0 / r - 1.0 / a)); // Vis-viva equation
-        }
-        
-        /**
-         * Gets orbital period in seconds
-         */
-        public double getOrbitalPeriod() {
-            return 2 * Math.PI / meanMotion;
-        }
-        
-        /**
-         * Gets current true anomaly
-         */
-        public double getTrueAnomaly() {
-            return nu;
-        }
-        
-        /**
-         * Converts true anomaly to eccentric anomaly
-         */
-        private double trueToEccentricAnomaly(double trueAnomaly, double eccentricity) {
-            double cosE = (eccentricity + Math.cos(trueAnomaly)) / (1 + eccentricity * Math.cos(trueAnomaly));
-            double sinE = Math.sqrt(1 - eccentricity * eccentricity) * Math.sin(trueAnomaly) / 
-                         (1 + eccentricity * Math.cos(trueAnomaly));
-            return Math.atan2(sinE, cosE);
-        }
-        
-        /**
-         * Converts eccentric anomaly to true anomaly
-         */
-        private double eccentricToTrueAnomaly(double eccentricAnomaly, double eccentricity) {
-            double cosNu = (Math.cos(eccentricAnomaly) - eccentricity) / (1 - eccentricity * Math.cos(eccentricAnomaly));
-            double sinNu = Math.sqrt(1 - eccentricity * eccentricity) * Math.sin(eccentricAnomaly) / 
-                          (1 - eccentricity * Math.cos(eccentricAnomaly));
-            return Math.atan2(sinNu, cosNu);
-        }
-        
-        /**
-         * Solves Kepler's equation M = E - e*sin(E) for eccentric anomaly E
-         * Uses Newton-Raphson iteration for numerical solution
-         */
-        private double solveKeplersEquation(double meanAnomaly, double eccentricity) {
-            double E = meanAnomaly; // Initial guess
-            double tolerance = 1e-10;
-            int maxIterations = 100;
-            
-            for (int i = 0; i < maxIterations; i++) {
-                double f = E - eccentricity * Math.sin(E) - meanAnomaly; // Function
-                double fp = 1 - eccentricity * Math.cos(E); // Derivative
-                double deltaE = f / fp; // Newton-Raphson step
-                E -= deltaE;
-                
-                if (Math.abs(deltaE) < tolerance) {
-                    break; // Converged
-                }
-            }
-            
-            return E;
-        }
     }
     
     public static void main(String[] args) {
