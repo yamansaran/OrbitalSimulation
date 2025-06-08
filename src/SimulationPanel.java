@@ -1,14 +1,15 @@
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
 import java.awt.image.BufferedImage;
 import java.util.*;
 import java.util.List;
+import javax.swing.*;
 
 /**
  * Custom JPanel for rendering the orbital simulation
  * Handles zooming, panning, and drawing all visual elements
+ * Enhanced with lunar effects visualization
  */
 public class SimulationPanel extends JPanel {
     // Zoom and pan state variables
@@ -47,7 +48,7 @@ public class SimulationPanel extends JPanel {
         // Mouse listeners for click-and-drag panning
         MouseAdapter mouseHandler = new MouseAdapter() {
             private Point lastPanPoint; // Last mouse position for drag calculation
-            
+        
             // Record initial mouse position when dragging starts
             public void mousePressed(MouseEvent e) {
                 lastPanPoint = e.getPoint();
@@ -57,11 +58,27 @@ public class SimulationPanel extends JPanel {
             public void mouseDragged(MouseEvent e) {
                 if (lastPanPoint != null) {
                     Point currentPoint = e.getPoint();
+                    
+                    // Calculate the change in mouse position
+                    int deltaX = currentPoint.x - lastPanPoint.x;
+                    int deltaY = currentPoint.y - lastPanPoint.y;
+                    
+                    // Update pan offsets (scale by zoom factor for consistent feel)
+                    offsetX += deltaX / zoomFactor;
+                    offsetY += deltaY / zoomFactor;
+                    
+                    // Update last pan point for next movement
                     lastPanPoint = currentPoint;
+                    
                     repaint(); // Update display during drag
                 }
             }
-        };
+            
+            // Clear the last pan point when mouse is released
+            public void mouseReleased(MouseEvent e) {
+                lastPanPoint = null;
+            }
+    };
         
         // Attach mouse handlers to panel
         addMouseListener(mouseHandler);
@@ -83,7 +100,7 @@ public class SimulationPanel extends JPanel {
      */
     public void zoomIn() {
         zoomFactor *= 1.5;
-        if (zoomFactor > 50.0) zoomFactor = 50.0; // Prevent excessive zoom
+        if (zoomFactor > 100.0) zoomFactor = 50.0; // Prevent excessive zoom
     }
     
     /**
@@ -91,7 +108,7 @@ public class SimulationPanel extends JPanel {
      */
     public void zoomOut() {
         zoomFactor /= 1.5;
-        if (zoomFactor < 0.1) zoomFactor = 0.1; // Prevent negative/zero zoom
+        if (zoomFactor < 0.01) zoomFactor = 0.1; // Prevent negative/zero zoom
     }
     
     /**
@@ -163,6 +180,11 @@ public class SimulationPanel extends JPanel {
                         bodyRadiusPixels * 2, bodyRadiusPixels * 2);
         }
         
+        // === NEW: DRAW MOON if lunar effects are enabled ===
+        if (simulation.isLunarEffectsEnabled()) {
+            drawMoon(g2d, centerX, centerY, currentScale);
+        }
+        
         Satellite satellite = simulation.getSatellite();
         if (satellite != null) {
             // DRAW ORBITAL PATH: Show the complete elliptical orbit
@@ -211,6 +233,64 @@ public class SimulationPanel extends JPanel {
         g2d.setFont(new Font("Arial", Font.PLAIN, 12));
         g2d.drawString(String.format("Zoom: %.1fx", zoomFactor), getWidth() - 100, 20);
         g2d.drawString("Mouse wheel: zoom, drag: pan", getWidth() - 200, getHeight() - 10);
+        
+        // === NEW: Show lunar effects status ===
+        if (simulation.isLunarEffectsEnabled()) {
+            g2d.setColor(Color.YELLOW);
+            g2d.drawString("Lunar Effects: ON", getWidth() - 120, 40);
+        }
+    }
+    
+    /**
+     * === NEW: Draws the Moon at its current orbital position ===
+     * 
+     * @param g2d Graphics context for drawing
+     * @param centerX Screen X coordinate of Earth's center
+     * @param centerY Screen Y coordinate of Earth's center  
+     * @param currentScale Current meter-to-pixel conversion factor
+     */
+    private void drawMoon(Graphics2D g2d, int centerX, int centerY, double currentScale) {
+        double[] moonPos = simulation.getMoonPosition();
+        double moonX = moonPos[0]; // Moon X position in meters
+        double moonY = moonPos[1]; // Moon Y position in meters
+        
+        // Convert Moon position to screen coordinates
+        int moonScreenX = centerX + (int)(moonX * currentScale);
+        int moonScreenY = centerY - (int)(moonY * currentScale); // Flip Y axis
+        
+        // Calculate Moon size on screen (Moon radius = 1,737,400 meters)
+        double moonRadius = 1737400; // Moon's radius in meters
+        int moonRadiusPixels = Math.max(2, (int)(moonRadius * currentScale)); // Minimum 2 pixels for visibility
+        
+        // Draw Moon as a circle
+        g2d.setColor(simulation.getMoonColor());
+        g2d.fillOval(moonScreenX - moonRadiusPixels, moonScreenY - moonRadiusPixels, 
+                    moonRadiusPixels * 2, moonRadiusPixels * 2);
+        
+        // Draw Moon outline
+        g2d.setColor(Color.WHITE);
+        g2d.setStroke(new BasicStroke(1.0f));
+        g2d.drawOval(moonScreenX - moonRadiusPixels, moonScreenY - moonRadiusPixels, 
+                    moonRadiusPixels * 2, moonRadiusPixels * 2);
+        
+        // Draw Moon orbit path (optional - only when zoomed out enough)
+        if (currentScale < 1e-8) { // Only show orbit when very zoomed out
+            g2d.setColor(new Color(128, 128, 128, 50)); // Semi-transparent gray
+            g2d.setStroke(new BasicStroke(1.0f, BasicStroke.CAP_BUTT, 
+                         BasicStroke.JOIN_MITER, 10.0f, new float[]{3.0f}, 0.0f));
+            
+            double moonOrbitRadius = 384400000 * currentScale; // Moon-Earth distance in pixels
+            int orbitDiameter = (int)(moonOrbitRadius * 2);
+            g2d.drawOval(centerX - (int)moonOrbitRadius, centerY - (int)moonOrbitRadius, 
+                        orbitDiameter, orbitDiameter);
+        }
+        
+        // Draw line from Earth to Moon (when zoomed in enough to see detail)
+        if (currentScale > 1e-9) {
+            g2d.setColor(new Color(255, 255, 255, 30)); // Very faint white line
+            g2d.setStroke(new BasicStroke(1.0f));
+            g2d.drawLine(centerX, centerY, moonScreenX, moonScreenY);
+        }
     }
     
     /**
@@ -268,6 +348,21 @@ public class SimulationPanel extends JPanel {
             String.format("Period: %.2f hours", period),
             String.format("True Anomaly: %.1f°", Math.toDegrees(satellite.getTrueAnomaly()))
         };
+        
+        // === NEW: Add lunar effects information if enabled ===
+        if (simulation.isLunarEffectsEnabled()) {
+            // Calculate Moon's current angle
+            double[] moonPos = simulation.getMoonPosition();
+            double moonAngle = Math.toDegrees(Math.atan2(moonPos[1], moonPos[0]));
+            if (moonAngle < 0) moonAngle += 360; // Normalize to 0-360 degrees
+            
+            // Expand info array to include lunar information
+            String[] expandedInfo = new String[info.length + 2];
+            System.arraycopy(info, 0, expandedInfo, 0, info.length);
+            expandedInfo[info.length] = String.format("Moon Position: %.1f°", moonAngle);
+            expandedInfo[info.length + 1] = "Lunar Perturbations: Active";
+            info = expandedInfo;
+        }
         
         // Draw information text in top-left corner
         for (int i = 0; i < info.length; i++) {
