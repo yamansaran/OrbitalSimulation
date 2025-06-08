@@ -46,9 +46,44 @@ public class Satellite {
     
     /**
      * Updates satellite position by advancing time
-     * Now includes lunar gravitational perturbations
+     * Now includes lunar gravitational perturbations with enhanced adaptive integration
+     * Optimized for extreme speeds up to 100,000x
      */
     public void updatePosition(double deltaTime) {
+        // Use enhanced adaptive integration for numerical stability at extreme speeds
+        // Dynamically adjust sub-step size based on the magnitude of the time step
+        double maxSubStep;
+        if (deltaTime > 3600) { // More than 1 hour
+            maxSubStep = 5.0; // 5 seconds for very large time steps
+        } else if (deltaTime > 600) { // More than 10 minutes  
+            maxSubStep = 10.0; // 10 seconds for large time steps
+        } else if (deltaTime > 60) { // More than 1 minute
+            maxSubStep = 15.0; // 15 seconds for medium time steps
+        } else {
+            maxSubStep = deltaTime; // Use full time step for small steps
+        }
+        
+        int numSubSteps = Math.max(1, (int)Math.ceil(deltaTime / maxSubStep));
+        double subStepSize = deltaTime / numSubSteps;
+        
+        // Perform integration in multiple smaller steps
+        for (int step = 0; step < numSubSteps; step++) {
+            updateSingleStep(subStepSize);
+        }
+    }
+    
+    /**
+     * === NEW: Performs a single integration step ===
+     * Separated for cleaner adaptive time stepping
+     */
+    private void updateSingleStep(double deltaTime) {
+        // Store original orbital elements for perturbation calculations
+        double originalOmega = omega;
+        double originalOmegaCapital = Omega;
+        double originalI = i;
+        double originalA = a;
+        double originalE = e;
+        
         // Convert true anomaly to mean anomaly
         double E = trueToEccentricAnomaly(nu, e); // Eccentric anomaly
         double M = E - e * Math.sin(E); // Mean anomaly from Kepler's equation
@@ -56,14 +91,84 @@ public class Satellite {
         // Advance mean anomaly by time step
         M += meanMotion * deltaTime;
         
-        // === NEW: Apply lunar perturbations if enabled ===
+        // === Apply lunar perturbations if enabled (before updating position) ===
         if (lunarEffectsEnabled && simulation != null) {
             applyLunarPerturbations(deltaTime);
         }
         
-        // Convert back to true anomaly
+        // Convert back to true anomaly with updated orbital elements
         E = solveKeplersEquation(M, e); // Solve Kepler's equation iteratively
         nu = eccentricToTrueAnomaly(E, e); // Convert to true anomaly
+        
+        // Ensure numerical stability - check for unrealistic changes
+        validateOrbitalElements(originalA, originalE, originalI, originalOmega, originalOmegaCapital);
+    }
+    
+    /**
+     * === NEW: Validates orbital elements to prevent numerical instability ===
+     */
+    private void validateOrbitalElements(double origA, double origE, double origI, double origOmega, double origOmegaCapital) {
+        // Prevent extreme changes that could cause numerical instability
+        double maxChangePercent = 0.01; // Maximum 1% change per step
+        
+        // Validate semi-major axis
+        double maxAChange = origA * maxChangePercent;
+        if (Math.abs(a - origA) > maxAChange) {
+            a = origA + Math.signum(a - origA) * maxAChange;
+        }
+        
+        // Validate eccentricity
+        double maxEChange = 0.001; // Maximum eccentricity change per step
+        if (Math.abs(e - origE) > maxEChange) {
+            e = origE + Math.signum(e - origE) * maxEChange;
+        }
+        
+        // Validate inclination
+        double maxIChange = Math.toRadians(0.1); // Maximum 0.1 degree change per step
+        if (Math.abs(i - origI) > maxIChange) {
+            i = origI + Math.signum(i - origI) * maxIChange;
+        }
+        
+        // Validate angles (allow larger changes as these are more naturally varying)
+        double maxAngleChange = Math.toRadians(1.0); // Maximum 1 degree change per step
+        if (Math.abs(omega - origOmega) > maxAngleChange) {
+            // Handle angle wrapping
+            double angleDiff = normalizeAngleDifference(omega - origOmega);
+            if (Math.abs(angleDiff) > maxAngleChange) {
+                omega = origOmega + Math.signum(angleDiff) * maxAngleChange;
+            }
+        }
+        
+        if (Math.abs(Omega - origOmegaCapital) > maxAngleChange) {
+            // Handle angle wrapping
+            double angleDiff = normalizeAngleDifference(Omega - origOmegaCapital);
+            if (Math.abs(angleDiff) > maxAngleChange) {
+                Omega = origOmegaCapital + Math.signum(angleDiff) * maxAngleChange;
+            }
+        }
+        
+        // Ensure orbital elements stay within physical bounds
+        e = Math.max(0, Math.min(0.99, e)); // Eccentricity between 0 and 0.99
+        i = Math.max(0, Math.min(Math.PI, i)); // Inclination between 0 and 180 degrees
+        a = Math.max(simulation.getEarthRadius() * 1.01, a); // Semi-major axis above Earth's surface
+        
+        // Normalize angles to [0, 2π] range
+        omega = normalizeAngle(omega);
+        Omega = normalizeAngle(Omega);
+        
+        // Recalculate mean motion with validated semi-major axis
+        double mu = gravitationalConstant * earthMass;
+        meanMotion = Math.sqrt(mu / (a * a * a));
+    }
+    
+    /**
+     * === NEW: Normalizes angle difference to [-π, π] range ===
+     * Handles angle wrapping correctly
+     */
+    private double normalizeAngleDifference(double angleDiff) {
+        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+        return angleDiff;
     }
     
     /**
@@ -71,6 +176,7 @@ public class Satellite {
      * 
      * This method simulates the Moon's gravitational influence on the satellite's orbit.
      * The perturbations cause gradual changes in the orbital elements over time.
+     * Now uses scaled perturbations for numerical stability at high speeds.
      * 
      * @param deltaTime Time step in seconds
      */
@@ -104,53 +210,47 @@ public class Satellite {
         // Higher altitude satellites are more affected by lunar perturbations
         double perturbationStrength = calculatePerturbationStrength(satDistance, satMoonDistance);
         
-        // Apply perturbations to orbital elements
+        // === NEW: Scale perturbations based on time step to maintain stability ===
+        double timeStepScale = Math.min(1.0, deltaTime / 1.0); // Normalize to 1-second steps
+        double scaledStrength = perturbationStrength * timeStepScale;
+        
+        // Apply perturbations to orbital elements with improved numerical stability
         // These are simplified models of how the Moon affects satellite orbits
         
         // 1. Longitude of Ascending Node precession (most significant effect)
         // The Moon causes the orbital plane to slowly rotate
-        double nodePrecessRate = perturbationStrength * 1e-7 * Math.cos(i); // Depends on inclination
-        deltaOmegaCapital += nodePrecessRate * deltaTime;
-        Omega += nodePrecessRate * deltaTime;
+        double nodePrecessRate = scaledStrength * 1e-8 * Math.cos(i) * deltaTime; // Reduced and scaled
+        deltaOmegaCapital += nodePrecessRate;
+        Omega += nodePrecessRate;
         
         // 2. Argument of periapsis rotation
         // The orientation of the ellipse within the orbital plane changes
-        double periapsisRotationRate = perturbationStrength * 5e-8 * (1 - e*e); // Depends on eccentricity
-        deltaOmega += periapsisRotationRate * deltaTime;
-        omega += periapsisRotationRate * deltaTime;
+        double periapsisRotationRate = scaledStrength * 5e-9 * (1 - e*e) * deltaTime; // Reduced and scaled
+        deltaOmega += periapsisRotationRate;
+        omega += periapsisRotationRate;
         
         // 3. Inclination oscillation (smaller effect)
         // The orbital plane tilt oscillates slightly
-        double inclinationOscillation = perturbationStrength * 1e-9 * Math.sin(2 * nu);
-        deltaI += inclinationOscillation * deltaTime;
-        i += inclinationOscillation * deltaTime;
+        double inclinationOscillation = scaledStrength * 1e-10 * Math.sin(2 * nu) * deltaTime; // Much reduced
+        deltaI += inclinationOscillation;
+        i += inclinationOscillation;
         
         // 4. Semi-major axis variation (very small effect)
         // The orbit size can change slightly due to energy transfer
-        double semiMajorAxisVariation = perturbationStrength * 1e-3 * Math.sin(nu);
-        a += semiMajorAxisVariation * deltaTime;
+        double semiMajorAxisVariation = scaledStrength * 1e-4 * Math.sin(nu) * deltaTime; // Reduced
+        a += semiMajorAxisVariation;
         
         // 5. Eccentricity variation (very small effect)
         // The orbit shape can change slightly
-        double eccentricityVariation = perturbationStrength * 1e-10 * Math.cos(nu);
-        e += eccentricityVariation * deltaTime;
+        double eccentricityVariation = scaledStrength * 1e-11 * Math.cos(nu) * deltaTime; // Much reduced
+        e += eccentricityVariation;
         
-        // Ensure orbital elements stay within valid bounds
-        e = Math.max(0, Math.min(0.99, e)); // Eccentricity between 0 and 0.99
-        i = Math.max(0, Math.min(Math.PI, i)); // Inclination between 0 and 180 degrees
-        a = Math.max(simulation.getEarthRadius() * 1.1, a); // Semi-major axis above Earth's surface
-        
-        // Normalize angles to [0, 2π] range
-        omega = normalizeAngle(omega);
-        Omega = normalizeAngle(Omega);
-        
-        // Recalculate mean motion with new semi-major axis
-        double mu = gravitationalConstant * earthMass;
-        meanMotion = Math.sqrt(mu / (a * a * a));
+        // Note: Bounds checking and normalization is now handled in validateOrbitalElements()
     }
     
     /**
      * === NEW: Calculates the strength of lunar perturbations ===
+     * Now includes smoothing for numerical stability
      * 
      * @param satDistance Distance from Earth center to satellite
      * @param satMoonDistance Distance from satellite to Moon
@@ -162,7 +262,12 @@ public class Satellite {
         
         double earthMoonMassRatio = MOON_MASS / earthMass; // ~0.012
         double distanceRatio = satDistance / MOON_EARTH_DISTANCE; // Satellite distance relative to Moon orbit
-        double proximityFactor = 1.0 / (satMoonDistance / MOON_EARTH_DISTANCE); // How close satellite is to Moon
+        double proximityFactor = 1.0 / Math.max(1.0, satMoonDistance / MOON_EARTH_DISTANCE); // How close satellite is to Moon
+        
+        // Apply smoothing to prevent sudden changes in perturbation strength
+        double minProximity = 0.1; // Minimum proximity factor to prevent extreme perturbations
+        double maxProximity = 10.0; // Maximum proximity factor to prevent instability
+        proximityFactor = Math.max(minProximity, Math.min(maxProximity, proximityFactor));
         
         // Perturbations are stronger for:
         // - Higher altitude satellites (larger distanceRatio)
@@ -171,7 +276,8 @@ public class Satellite {
         
         // Apply scaling factor to make effects visible in simulation timeframes
         // Real lunar perturbations occur over months/years, we compress this for visualization
-        return strength * 1000; // Scale factor for demonstration
+        // Reduced scaling for better numerical stability
+        return strength * 100; // Reduced scale factor for smoother operation
     }
     
     /**

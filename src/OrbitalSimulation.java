@@ -1154,10 +1154,10 @@ public class OrbitalSimulation extends JFrame {
         gbc.gridx = 0;
         panel.add(new JLabel("Time Speed:"), gbc);
         
-        // Logarithmic slider for time speed (powers of 10 from 0.001x to 10000x)
+        // Logarithmic slider for time speed (powers of 10 from 0.001x to 100000x)
         gbc.gridx = 1;
         gbc.gridwidth = 2; // Span two columns
-        JSlider speedSlider = new JSlider(-3, 4, 0); // -3 = 0.001x, 4 = 10000x
+        JSlider speedSlider = new JSlider(-3, 5, 0); // -3 = 0.001x, 5 = 100000x
         speedSlider.setMajorTickSpacing(1);
         speedSlider.setPaintTicks(true);
         speedSlider.setPaintLabels(true);
@@ -1295,8 +1295,12 @@ public class OrbitalSimulation extends JFrame {
          */
         speedSlider.addChangeListener(e -> {
             int value = speedSlider.getValue();
-            if (value == 4) {
-                // Special case: maximum slider position = 10000x speed
+            if (value == 5) {
+                // NEW: Extended maximum slider position = 100000x speed
+                timeMultiplier = 100000;
+                speedLabel.setText("100000x");
+            } else if (value == 4) {
+                // Previous maximum position = 10000x speed
                 timeMultiplier = 10000;
                 speedLabel.setText("10000x");
             } else {
@@ -1316,19 +1320,21 @@ public class OrbitalSimulation extends JFrame {
             public void actionPerformed(ActionEvent e) {
                 try {
                     double customSpeed = Double.parseDouble(customSpeedField.getText());
-                    if (customSpeed > 0 && customSpeed <= 10000) {
+                    if (customSpeed > 0 && customSpeed <= 100000) { // Updated maximum limit
                         timeMultiplier = customSpeed;
                         speedLabel.setText(String.format("%.0fx", timeMultiplier));
                         // Update slider position to approximate logarithmic value
-                        if (customSpeed >= 10000) {
-                            speedSlider.setValue(4); // Maximum position
+                        if (customSpeed >= 100000) {
+                            speedSlider.setValue(5); // New maximum position
+                        } else if (customSpeed >= 10000) {
+                            speedSlider.setValue(4); // Previous maximum position
                         } else {
                             // Calculate logarithmic slider position
                             int sliderValue = (int)Math.round(Math.log10(customSpeed));
                             speedSlider.setValue(Math.max(-3, Math.min(3, sliderValue)));
                         }
                     } else {
-                        JOptionPane.showMessageDialog(OrbitalSimulation.this, "Speed must be between 0.001 and 10000!");
+                        JOptionPane.showMessageDialog(OrbitalSimulation.this, "Speed must be between 0.001 and 100000!");
                     }
                 } catch (NumberFormatException ex) {
                     JOptionPane.showMessageDialog(OrbitalSimulation.this, "Invalid speed value!");
@@ -1596,20 +1602,41 @@ public class OrbitalSimulation extends JFrame {
     /**
      * Starts the animation timer for smooth orbital motion display
      * Timer fires every animationDelay ms for smooth animation
+     * Uses adaptive time stepping for high-speed stability up to 100,000x
      */
     private void startAnimation() {
         animationTimer = new Timer(animationDelay, new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 if (!isPaused) {
-                    // Update simulation time
-                    currentSimulationTime += 0.05 * timeMultiplier;
+                    // Calculate effective time step with adaptive resolution
+                    double baseTimeStep = 0.05; // Base time step in seconds
+                    double effectiveTimeStep = baseTimeStep * timeMultiplier;
+                    
+                    // Use enhanced adaptive time stepping for very high speeds
+                    // Dynamically adjust maximum sub-step size based on speed
+                    double maxSubStep;
+                    if (timeMultiplier > 50000) {
+                        maxSubStep = 30.0; // 30 seconds for extreme speeds (50,000x+)
+                    } else if (timeMultiplier > 10000) {
+                        maxSubStep = 45.0; // 45 seconds for very high speeds (10,000x+)
+                    } else if (timeMultiplier > 1000) {
+                        maxSubStep = 60.0; // 1 minute for high speeds (1,000x+)
+                    } else {
+                        maxSubStep = 120.0; // 2 minutes for moderate speeds
+                    }
+                    
+                    int numSubSteps = Math.max(1, (int)Math.ceil(effectiveTimeStep / maxSubStep));
+                    double subStepSize = effectiveTimeStep / numSubSteps;
+                    
+                    // Perform multiple sub-steps for smooth integration
+                    for (int i = 0; i < numSubSteps; i++) {
+                        currentSimulationTime += subStepSize;
+                        satellite.updatePosition(subStepSize);
+                    }
                     
                     // Update date/time display
                     updateDateTimeDisplay();
                     
-                    // Update satellite position with time step scaled by speed multiplier
-                    // 0.05 represents 0.05 seconds of simulated time per frame
-                    satellite.updatePosition(0.05 * timeMultiplier);
                     simulationPanel.repaint(); // Trigger redraw of simulation display
                 }
             }
