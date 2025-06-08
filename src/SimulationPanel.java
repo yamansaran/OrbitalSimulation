@@ -4,7 +4,9 @@ import java.awt.geom.*;
 import java.awt.image.BufferedImage;
 import java.util.*;
 import java.util.List;
+import java.io.File;
 import javax.swing.*;
+import javax.imageio.ImageIO;
 
 /**
  * Custom JPanel for rendering the orbital simulation
@@ -185,6 +187,16 @@ public class SimulationPanel extends JPanel {
             drawMoon(g2d, centerX, centerY, currentScale);
         }
         
+        // === NEW: DRAW SUN if solar effects are enabled ===
+        if (simulation.isSolarEffectsEnabled()) {
+            drawSun(g2d, centerX, centerY, currentScale);
+        }
+        
+        // === NEW: DRAW COMBINED GRAVITATIONAL FORCE VECTOR ===
+        if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled()) {
+            drawCombinedForceVector(g2d, centerX, centerY, currentScale);
+        }
+        
         Satellite satellite = simulation.getSatellite();
         if (satellite != null) {
             // DRAW ORBITAL PATH: Show the complete elliptical orbit
@@ -234,15 +246,28 @@ public class SimulationPanel extends JPanel {
         g2d.drawString(String.format("Zoom: %.1fx", zoomFactor), getWidth() - 100, 20);
         g2d.drawString("Mouse wheel: zoom, drag: pan", getWidth() - 200, getHeight() - 10);
         
-        // === NEW: Show lunar effects status ===
-        if (simulation.isLunarEffectsEnabled()) {
+        // === NEW: Show combined force vector status ===
+        if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled()) {
             g2d.setColor(Color.YELLOW);
-            g2d.drawString("Lunar Effects: ON", getWidth() - 120, 40);
+            String effectsStatus = "";
+            if (simulation.isLunarEffectsEnabled() && simulation.isSolarEffectsEnabled()) {
+                effectsStatus = "Lunar + Solar Effects: ON";
+            } else if (simulation.isLunarEffectsEnabled()) {
+                effectsStatus = "Lunar Effects: ON";
+            } else if (simulation.isSolarEffectsEnabled()) {
+                effectsStatus = "Solar Effects: ON";
+            }
+            g2d.drawString(effectsStatus, getWidth() - 180, 40);
+            
+            // Add info about the blue force vector
+            g2d.setColor(Color.CYAN);
+            g2d.drawString("Blue line = Combined gravitational force", getWidth() - 250, 60);
         }
     }
     
     /**
      * === NEW: Draws the Moon at its current orbital position ===
+     * Now supports Moon.png image
      * 
      * @param g2d Graphics context for drawing
      * @param centerX Screen X coordinate of Earth's center
@@ -260,18 +285,49 @@ public class SimulationPanel extends JPanel {
         
         // Calculate Moon size on screen (Moon radius = 1,737,400 meters)
         double moonRadius = 1737400; // Moon's radius in meters
-        int moonRadiusPixels = Math.max(2, (int)(moonRadius * currentScale)); // Minimum 2 pixels for visibility
+        int moonRadiusPixels = Math.max(4, (int)(moonRadius * currentScale)); // Minimum 4 pixels for visibility
         
-        // Draw Moon as a circle
-        g2d.setColor(simulation.getMoonColor());
-        g2d.fillOval(moonScreenX - moonRadiusPixels, moonScreenY - moonRadiusPixels, 
-                    moonRadiusPixels * 2, moonRadiusPixels * 2);
-        
-        // Draw Moon outline
-        g2d.setColor(Color.WHITE);
-        g2d.setStroke(new BasicStroke(1.0f));
-        g2d.drawOval(moonScreenX - moonRadiusPixels, moonScreenY - moonRadiusPixels, 
-                    moonRadiusPixels * 2, moonRadiusPixels * 2);
+        // Try to load and draw Moon image
+        try {
+            BufferedImage moonImage = null;
+            try {
+                File moonFile = new File("src/Moon.png");
+                if (moonFile.exists()) {
+                    moonImage = javax.imageio.ImageIO.read(moonFile);
+                }
+            } catch (Exception e) {
+                // If image loading fails, moonImage stays null
+            }
+            
+            if (moonImage != null) {
+                // Draw Moon image
+                int imageSize = moonRadiusPixels * 2;
+                g2d.drawImage(moonImage, moonScreenX - moonRadiusPixels, moonScreenY - moonRadiusPixels, 
+                             imageSize, imageSize, null);
+                
+                // Optional: Add subtle outline
+                g2d.setColor(Color.WHITE);
+                g2d.setStroke(new BasicStroke(1.0f));
+                g2d.drawOval(moonScreenX - moonRadiusPixels, moonScreenY - moonRadiusPixels, 
+                            imageSize, imageSize);
+            } else {
+                // Fallback: Draw Moon as a colored circle
+                g2d.setColor(simulation.getMoonColor());
+                g2d.fillOval(moonScreenX - moonRadiusPixels, moonScreenY - moonRadiusPixels, 
+                            moonRadiusPixels * 2, moonRadiusPixels * 2);
+                
+                // Draw Moon outline
+                g2d.setColor(Color.WHITE);
+                g2d.setStroke(new BasicStroke(1.0f));
+                g2d.drawOval(moonScreenX - moonRadiusPixels, moonScreenY - moonRadiusPixels, 
+                            moonRadiusPixels * 2, moonRadiusPixels * 2);
+            }
+        } catch (Exception e) {
+            // Final fallback if anything goes wrong
+            g2d.setColor(simulation.getMoonColor());
+            g2d.fillOval(moonScreenX - moonRadiusPixels, moonScreenY - moonRadiusPixels, 
+                        moonRadiusPixels * 2, moonRadiusPixels * 2);
+        }
         
         // Draw Moon orbit path (optional - only when zoomed out enough)
         if (currentScale < 1e-8) { // Only show orbit when very zoomed out
@@ -286,15 +342,194 @@ public class SimulationPanel extends JPanel {
         }
         
         // Draw line from Earth to Moon (when zoomed in enough to see detail)
-        if (currentScale > 1e-9) {
-            g2d.setColor(new Color(255, 255, 255, 30)); // Very faint white line
-            g2d.setStroke(new BasicStroke(1.0f));
+        if (currentScale > 1e-9) { // Adjusted to match Sun line range better
+            g2d.setColor(new Color(255, 255, 255, 40)); // Slightly more visible white line
+            g2d.setStroke(new BasicStroke(1.5f)); // Slightly thicker line
             g2d.drawLine(centerX, centerY, moonScreenX, moonScreenY);
         }
     }
     
     /**
-     * Draws the complete orbital ellipse as a dashed white line
+     * === NEW: Draws the Sun as a directional line extending to screen edge ===
+     * 
+     * @param g2d Graphics context for drawing
+     * @param centerX Screen X coordinate of Earth's center
+     * @param centerY Screen Y coordinate of Earth's center  
+     * @param currentScale Current meter-to-pixel conversion factor
+     */
+    private void drawSun(Graphics2D g2d, int centerX, int centerY, double currentScale) {
+        double[] sunPos = simulation.getSunPosition();
+        double sunX = sunPos[0]; // Sun X position in meters
+        double sunY = sunPos[1]; // Sun Y position in meters
+        
+        // Calculate Sun direction (normalize to unit vector)
+        double sunDistance = Math.sqrt(sunX * sunX + sunY * sunY);
+        if (sunDistance == 0) return; // Avoid division by zero
+        
+        double sunDirX = sunX / sunDistance;
+        double sunDirY = sunY / sunDistance;
+        
+        // Calculate line that extends to screen edge
+        // Get screen dimensions
+        int screenWidth = getWidth();
+        int screenHeight = getHeight();
+        
+        // Calculate how far we need to extend the line to reach screen edge
+        // Check intersections with all four screen edges and use the farthest one
+        double maxDistance = Math.max(screenWidth, screenHeight) * 2; // Ensure it reaches edge
+        
+        // Calculate end point that definitely extends beyond screen
+        int lineEndX = centerX + (int)(sunDirX * maxDistance);
+        int lineEndY = centerY - (int)(sunDirY * maxDistance); // Flip Y axis
+        
+        // Draw the Sun direction line extending to infinity (screen edge)
+        g2d.setColor(simulation.getSunColor());
+        g2d.setStroke(new BasicStroke(3.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(centerX, centerY, lineEndX, lineEndY);
+        
+        // Optional: Draw a small arrowhead near Earth to show direction
+        double arrowDistance = Math.max(50, simulation.getEarthRadius() * currentScale * 2);
+        int arrowX = centerX + (int)(sunDirX * arrowDistance);
+        int arrowY = centerY - (int)(sunDirY * arrowDistance);
+        drawArrowHead(g2d, centerX, centerY, arrowX, arrowY, simulation.getSunColor());
+    }
+    
+    /**
+     * === NEW: Draws the combined gravitational force vector from Sun and Moon ===
+     * 
+     * @param g2d Graphics context for drawing
+     * @param centerX Screen X coordinate of Earth's center
+     * @param centerY Screen Y coordinate of Earth's center  
+     * @param currentScale Current meter-to-pixel conversion factor
+     */
+    private void drawCombinedForceVector(Graphics2D g2d, int centerX, int centerY, double currentScale) {
+        double combinedForceX = 0;
+        double combinedForceY = 0;
+        
+        // Calculate lunar gravitational force if enabled
+        if (simulation.isLunarEffectsEnabled()) {
+            double[] moonPos = simulation.getMoonPosition();
+            double moonX = moonPos[0];
+            double moonY = moonPos[1];
+            
+            // Calculate distance to Moon
+            double moonDistance = Math.sqrt(moonX * moonX + moonY * moonY);
+            if (moonDistance > 0) {
+                // Gravitational force magnitude: F = G * M * m / r²
+                // For visualization, we'll use a normalized force (ignore satellite mass and G)
+                double moonMass = 7.342e22; // Moon mass in kg
+                double moonForceMagnitude = moonMass / (moonDistance * moonDistance);
+                
+                // Force direction (unit vector toward Moon)
+                double moonForceX = (moonX / moonDistance) * moonForceMagnitude;
+                double moonForceY = (moonY / moonDistance) * moonForceMagnitude;
+                
+                combinedForceX += moonForceX;
+                combinedForceY += moonForceY;
+            }
+        }
+        
+        // Calculate solar gravitational force if enabled
+        if (simulation.isSolarEffectsEnabled()) {
+            double[] sunPos = simulation.getSunPosition();
+            double sunX = sunPos[0];
+            double sunY = sunPos[1];
+            
+            // Calculate distance to Sun
+            double sunDistance = Math.sqrt(sunX * sunX + sunY * sunY);
+            if (sunDistance > 0) {
+                // Gravitational force magnitude: F = G * M * m / r²
+                double sunMass = 1.989e30; // Sun mass in kg
+                double sunForceMagnitude = sunMass / (sunDistance * sunDistance);
+                
+                // Force direction (unit vector toward Sun)
+                double sunForceX = (sunX / sunDistance) * sunForceMagnitude;
+                double sunForceY = (sunY / sunDistance) * sunForceMagnitude;
+                
+                combinedForceX += sunForceX;
+                combinedForceY += sunForceY;
+            }
+        }
+        
+        // If we have any force, draw the vector
+        double combinedForceMagnitude = Math.sqrt(combinedForceX * combinedForceX + combinedForceY * combinedForceY);
+        if (combinedForceMagnitude > 0) {
+            // Normalize the force vector for display
+            double forceDirectionX = combinedForceX / combinedForceMagnitude;
+            double forceDirectionY = combinedForceY / combinedForceMagnitude;
+            
+            // Scale the vector length for good visibility
+            // Make it proportional to force magnitude but cap it for readability
+            double baseLength = 150; // Base length in pixels
+            double scaleFactor = Math.log10(combinedForceMagnitude + 1) * 20; // Logarithmic scaling
+            double vectorLength = Math.min(baseLength + scaleFactor, 400); // Cap at 400 pixels
+            
+            // Calculate end point of force vector
+            int vectorEndX = centerX + (int)(forceDirectionX * vectorLength);
+            int vectorEndY = centerY - (int)(forceDirectionY * vectorLength); // Flip Y axis
+            
+            // Draw the combined force vector as a thick blue line
+            g2d.setColor(Color.BLUE);
+            g2d.setStroke(new BasicStroke(4.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2d.drawLine(centerX, centerY, vectorEndX, vectorEndY);
+            
+            // Draw arrowhead to show direction
+            drawArrowHead(g2d, centerX, centerY, vectorEndX, vectorEndY, Color.BLUE);
+            
+            // Add a small blue circle at the start to mark the origin
+            g2d.setColor(Color.BLUE);
+            g2d.fillOval(centerX - 4, centerY - 4, 8, 8);
+            
+            // Optional: Draw magnitude indicator text
+            if (vectorLength > 100) { // Only show text if vector is long enough
+                g2d.setColor(Color.BLUE);
+                g2d.setFont(new Font("Arial", Font.BOLD, 10));
+                String magnitudeText = String.format("F: %.1e", combinedForceMagnitude);
+                
+                // Position text near the end of vector
+                int textX = vectorEndX + 10;
+                int textY = vectorEndY - 5;
+                
+                // Keep text on screen
+                if (textX > getWidth() - 60) textX = vectorEndX - 60;
+                if (textY < 15) textY = vectorEndY + 15;
+                
+                g2d.drawString(magnitudeText, textX, textY);
+            }
+        }
+    }
+     
+    private void drawArrowHead(Graphics2D g2d, int startX, int startY, int endX, int endY, Color color) {
+        // Calculate arrow direction
+        double dx = endX - startX;
+        double dy = endY - startY;
+        double length = Math.sqrt(dx * dx + dy * dy);
+        
+        if (length == 0) return;
+        
+        // Normalize direction vector
+        dx /= length;
+        dy /= length;
+        
+        // Calculate arrowhead points
+        double arrowLength = 15;
+        double arrowAngle = Math.PI / 6; // 30 degrees
+        
+        // Left side of arrowhead
+        double leftX = endX - arrowLength * (dx * Math.cos(arrowAngle) - dy * Math.sin(arrowAngle));
+        double leftY = endY - arrowLength * (dy * Math.cos(arrowAngle) + dx * Math.sin(arrowAngle));
+        
+        // Right side of arrowhead
+        double rightX = endX - arrowLength * (dx * Math.cos(-arrowAngle) - dy * Math.sin(-arrowAngle));
+        double rightY = endY - arrowLength * (dy * Math.cos(-arrowAngle) + dx * Math.sin(-arrowAngle));
+        
+        // Draw arrowhead
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(3.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(endX, endY, (int)leftX, (int)leftY);
+        g2d.drawLine(endX, endY, (int)rightX, (int)rightY);
+    }
+    /*
      * 
      * @param g2d Graphics context for drawing
      * @param centerX Screen X coordinate of Earth's center
@@ -349,18 +584,32 @@ public class SimulationPanel extends JPanel {
             String.format("True Anomaly: %.1f°", Math.toDegrees(satellite.getTrueAnomaly()))
         };
         
-        // === NEW: Add lunar effects information if enabled ===
-        if (simulation.isLunarEffectsEnabled()) {
-            // Calculate Moon's current angle
-            double[] moonPos = simulation.getMoonPosition();
-            double moonAngle = Math.toDegrees(Math.atan2(moonPos[1], moonPos[0]));
-            if (moonAngle < 0) moonAngle += 360; // Normalize to 0-360 degrees
-            
-            // Expand info array to include lunar information
-            String[] expandedInfo = new String[info.length + 2];
+        // === NEW: Add solar effects information if enabled ===
+        if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled()) {
+            String[] expandedInfo = new String[info.length + (simulation.isLunarEffectsEnabled() ? 2 : 0) + (simulation.isSolarEffectsEnabled() ? 2 : 0)];
             System.arraycopy(info, 0, expandedInfo, 0, info.length);
-            expandedInfo[info.length] = String.format("Moon Position: %.1f°", moonAngle);
-            expandedInfo[info.length + 1] = "Lunar Perturbations: Active";
+            int infoIndex = info.length;
+            
+            if (simulation.isLunarEffectsEnabled()) {
+                // Calculate Moon's current angle
+                double[] moonPos = simulation.getMoonPosition();
+                double moonAngle = Math.toDegrees(Math.atan2(moonPos[1], moonPos[0]));
+                if (moonAngle < 0) moonAngle += 360; // Normalize to 0-360 degrees
+                
+                expandedInfo[infoIndex++] = String.format("Moon Position: %.1f°", moonAngle);
+                expandedInfo[infoIndex++] = "Lunar Perturbations: Active";
+            }
+            
+            if (simulation.isSolarEffectsEnabled()) {
+                // Calculate Sun's current angle
+                double[] sunPos = simulation.getSunPosition();
+                double sunAngle = Math.toDegrees(Math.atan2(sunPos[1], sunPos[0]));
+                if (sunAngle < 0) sunAngle += 360; // Normalize to 0-360 degrees
+                
+                expandedInfo[infoIndex++] = String.format("Sun Position: %.1f°", sunAngle);
+                expandedInfo[infoIndex++] = "Solar Perturbations: Active";
+            }
+            
             info = expandedInfo;
         }
         

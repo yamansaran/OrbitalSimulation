@@ -85,14 +85,20 @@ public class OrbitalSimulation extends JFrame {
     private String currentSatelliteType = "Default"; // Default satellite type
     private BufferedImage satelliteImage;
     
-    // === NEW: Lunar Effects System ===
+    // === NEW: Lunar and Solar Effects System ===
     private boolean lunarEffectsEnabled = false; // Toggle for lunar gravitational effects
+    private boolean solarEffectsEnabled = false; // Toggle for solar gravitational effects
     private long simulationStartTime; // Unix timestamp for simulation start (January 1, 1970 00:00:00 UTC)
     private double currentSimulationTime; // Current simulation time in seconds since start
     private static final double LUNAR_ORBITAL_PERIOD = 29.530 * 24 * 3600; // Lunar cycle in seconds (29.530 days)
+    private static final double SOLAR_ORBITAL_PERIOD = 365.25 * 24 * 3600; // Solar year in seconds (365.25 days)
     private static final double INITIAL_MOON_ANGLE = 84.7; // Moon's initial position in degrees east
+    private static final double INITIAL_SUN_ANGLE = 281.0; // Sun's initial position in degrees (Jan 1, 1970)
     private static final double MOON_EARTH_DISTANCE = 384400000; // Average Moon-Earth distance in meters
+    private static final double SUN_EARTH_DISTANCE = 149597870700.0; // Average Sun-Earth distance in meters (1 AU)
     private static final double MOON_MASS = 7.342e22; // Moon's mass in kg
+    private static final double SUN_MASS = 1.989e30; // Sun's mass in kg
+    private Color sunColor = new Color(255, 255, 0); // Sun color
     private JLabel dateTimeLabel; // Label to display current simulation date/time
     
     // Available satellite types (can be expanded by adding PNG files to src folder)
@@ -145,8 +151,9 @@ public class OrbitalSimulation extends JFrame {
     public BufferedImage getSatelliteImage() { return satelliteImage; }
     public String getCurrentSatelliteType() { return currentSatelliteType; }
     
-    // === NEW: Lunar Effects Getters ===
+    // === NEW: Lunar and Solar Effects Getters ===
     public boolean isLunarEffectsEnabled() { return lunarEffectsEnabled; }
+    public boolean isSolarEffectsEnabled() { return solarEffectsEnabled; }
     public double[] getMoonPosition() {
         if (!lunarEffectsEnabled) return new double[]{0, 0};
         
@@ -155,6 +162,17 @@ public class OrbitalSimulation extends JFrame {
         double moonY = MOON_EARTH_DISTANCE * Math.sin(moonAngle);
         return new double[]{moonX, moonY};
     }
+    
+    public double[] getSunPosition() {
+        if (!solarEffectsEnabled) return new double[]{0, 0};
+        
+        double sunAngle = Math.toRadians(INITIAL_SUN_ANGLE + (currentSimulationTime / SOLAR_ORBITAL_PERIOD) * 360.0);
+        double sunX = SUN_EARTH_DISTANCE * Math.cos(sunAngle);
+        double sunY = SUN_EARTH_DISTANCE * Math.sin(sunAngle);
+        return new double[]{sunX, sunY};
+    }
+    
+    public Color getSunColor() { return sunColor; }
 
     /**
      * Constructor: Sets up the main window and initializes all components
@@ -256,7 +274,7 @@ public class OrbitalSimulation extends JFrame {
      */
     private void showNonKeplerianEffectsDialog() {
         JDialog dialog = new JDialog(this, "Non-Keplerian Effects", true);
-        dialog.setSize(450, 300);
+        dialog.setSize(500, 400);
         dialog.setLocationRelativeTo(this);
         
         JPanel panel = new JPanel(new GridBagLayout());
@@ -267,33 +285,78 @@ public class OrbitalSimulation extends JFrame {
         // Lunar effects toggle
         JCheckBox lunarEffectsBox = new JCheckBox("Enable Lunar Gravitational Effects", lunarEffectsEnabled);
         
+        // Solar effects toggle
+        JCheckBox solarEffectsBox = new JCheckBox("Enable Solar Gravitational Effects", solarEffectsEnabled);
+        
         gbc.gridy = 0;
         gbc.gridx = 0;
         gbc.gridwidth = 2;
         panel.add(lunarEffectsBox, gbc);
         
-        // Information about lunar effects
         gbc.gridy = 1;
+        panel.add(solarEffectsBox, gbc);
+        
+        // Information about effects
+        gbc.gridy = 2;
         gbc.gridwidth = 2;
-        JTextArea infoArea = new JTextArea(8, 35);
+        JTextArea infoArea = new JTextArea(12, 40);
         infoArea.setEditable(false);
         infoArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        infoArea.setText(
-            "Lunar Gravitational Effects:\n" +
-            "\n" +
-            "When enabled, the Moon's gravitational influence affects\n" +
-            "the satellite's orbit. The Moon orbits Earth with a period\n" +
-            "of 29.530 days, starting at 84.7° east at Jan 1, 1970.\n" +
-            "\n" +
-            "This causes gradual perturbations in the satellite's\n" +
-            "orbital elements, particularly noticeable in:\n" +
-            "• Orbital inclination drift\n" +
-            "• Longitude of ascending node precession\n" +
-            "• Argument of periapsis rotation\n" +
-            "\n" +
-            "Current Moon Position: " + String.format("%.1f°", 
-                (INITIAL_MOON_ANGLE + (currentSimulationTime / LUNAR_ORBITAL_PERIOD) * 360.0) % 360.0)
-        );
+        
+        // Update info based on current selections
+        ActionListener updateInfo = e -> {
+            StringBuilder info = new StringBuilder();
+            
+            if (lunarEffectsBox.isSelected()) {
+                info.append("LUNAR GRAVITATIONAL EFFECTS:\n");
+                info.append("• Moon orbits Earth every 29.530 days\n");
+                info.append("• Started at 84.7° east on Jan 1, 1970\n");
+                info.append("• Causes orbital plane precession\n");
+                info.append("• Affects argument of periapsis\n");
+                info.append("• Induces inclination oscillations\n");
+                double moonAngle = (INITIAL_MOON_ANGLE + (currentSimulationTime / LUNAR_ORBITAL_PERIOD) * 360.0) % 360.0;
+                info.append(String.format("• Current Moon Position: %.1f°\n", moonAngle));
+                info.append("\n");
+            }
+            
+            if (solarEffectsBox.isSelected()) {
+                info.append("SOLAR GRAVITATIONAL EFFECTS:\n");
+                info.append("• Sun has apparent 1-year orbital period\n");
+                info.append("• Started at 281° on Jan 1, 1970\n");
+                info.append("• Causes long-term orbital evolution\n");
+                info.append("• Affects eccentricity and inclination\n");
+                info.append("• Stronger effects on high-altitude satellites\n");
+                double sunAngle = (INITIAL_SUN_ANGLE + (currentSimulationTime / SOLAR_ORBITAL_PERIOD) * 360.0) % 360.0;
+                info.append(String.format("• Current Sun Position: %.1f°\n", sunAngle));
+                info.append("\n");
+            }
+            
+            if (!lunarEffectsBox.isSelected() && !solarEffectsBox.isSelected()) {
+                info.append("NON-KEPLERIAN EFFECTS DISABLED\n\n");
+                info.append("When enabled, these effects simulate:\n");
+                info.append("• Third-body gravitational perturbations\n");
+                info.append("• Orbital element evolution over time\n");
+                info.append("• Realistic satellite orbital mechanics\n\n");
+                info.append("Effects are most noticeable on:\n");
+                info.append("• High-altitude satellites (GEO, HEO)\n");
+                info.append("• Eccentric orbits\n");
+                info.append("• Inclined orbital planes\n");
+            }
+            
+            if (lunarEffectsBox.isSelected() && solarEffectsBox.isSelected()) {
+                info.append("COMBINED EFFECTS:\n");
+                info.append("• Complex multi-body dynamics\n");
+                info.append("• Resonances and secular variations\n");
+                info.append("• Enhanced orbital evolution\n");
+            }
+            
+            infoArea.setText(info.toString());
+        };
+        
+        lunarEffectsBox.addActionListener(updateInfo);
+        solarEffectsBox.addActionListener(updateInfo);
+        updateInfo.actionPerformed(null); // Initial update
+        
         JScrollPane infoScroll = new JScrollPane(infoArea);
         panel.add(infoScroll, gbc);
         
@@ -304,10 +367,13 @@ public class OrbitalSimulation extends JFrame {
         
         okButton.addActionListener(e -> {
             boolean oldLunarEffects = lunarEffectsEnabled;
-            lunarEffectsEnabled = lunarEffectsBox.isSelected();
+            boolean oldSolarEffects = solarEffectsEnabled;
             
-            // If lunar effects were toggled, update the satellite
-            if (oldLunarEffects != lunarEffectsEnabled) {
+            lunarEffectsEnabled = lunarEffectsBox.isSelected();
+            solarEffectsEnabled = solarEffectsBox.isSelected();
+            
+            // If any effects were toggled, update the satellite
+            if (oldLunarEffects != lunarEffectsEnabled || oldSolarEffects != solarEffectsEnabled) {
                 createSatellite();
                 simulationPanel.repaint();
             }
@@ -320,7 +386,7 @@ public class OrbitalSimulation extends JFrame {
         buttonPanel.add(okButton);
         buttonPanel.add(cancelButton);
         
-        gbc.gridy = 2;
+        gbc.gridy = 3;
         gbc.gridx = 0;
         gbc.gridwidth = 2;
         gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -884,6 +950,17 @@ public class OrbitalSimulation extends JFrame {
             }
         });
         
+        // === NEW: Sun Color Button ===
+        JButton sunColorButton = new JButton("     ");
+        sunColorButton.setBackground(sunColor);
+        sunColorButton.addActionListener(e -> {
+            Color newColor = JColorChooser.showDialog(dialog, "Choose Sun Color", sunColor);
+            if (newColor != null) {
+                sunColor = newColor;
+                sunColorButton.setBackground(newColor);
+            }
+        });
+        
         gbc.gridy = 0;
         gbc.gridx = 0; colorsPanel.add(new JLabel("Earth Color:"), gbc);
         gbc.gridx = 1; colorsPanel.add(earthColorButton, gbc);
@@ -899,6 +976,10 @@ public class OrbitalSimulation extends JFrame {
         gbc.gridy = 3;
         gbc.gridx = 0; colorsPanel.add(new JLabel("Moon Color:"), gbc);
         gbc.gridx = 1; colorsPanel.add(moonColorButton, gbc);
+        
+        gbc.gridy = 4;
+        gbc.gridx = 0; colorsPanel.add(new JLabel("Sun Color:"), gbc);
+        gbc.gridx = 1; colorsPanel.add(sunColorButton, gbc);
         
         tabbedPane.add("Colors", colorsPanel);
         
@@ -1031,8 +1112,9 @@ public class OrbitalSimulation extends JFrame {
             autoClearOnZoom = true;
             autoClearOnUpdate = true;
             
-            // === NEW: Reset lunar effects ===
+            // === NEW: Reset lunar and solar effects ===
             lunarEffectsEnabled = false;
+            solarEffectsEnabled = false;
             currentSimulationTime = 0;
             
             // Reset to Earth
@@ -1596,7 +1678,7 @@ public class OrbitalSimulation extends JFrame {
     private void createSatellite() {
         satellite = new Satellite(semiMajorAxis, eccentricity, inclination, 
                                 argumentOfPeriapsis, longitudeOfAscendingNode, trueAnomaly,
-                                gravitationalConstant, earthMass, lunarEffectsEnabled, this);
+                                gravitationalConstant, earthMass, lunarEffectsEnabled, solarEffectsEnabled, this);
     }
     
     /**
