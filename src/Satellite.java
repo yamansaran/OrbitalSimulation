@@ -363,7 +363,9 @@ public class Satellite {
         // Solar effects are primarily long-term secular changes
         return strength * 0.001; // Much smaller scale factor than lunar (1000x smaller)
     }
-    /* 
+    
+    /**
+     * === NEW: Calculates the strength of lunar perturbations ===
      * Now includes smoothing for numerical stability
      * 
      * @param satDistance Distance from Earth center to satellite

@@ -192,9 +192,10 @@ public class SimulationPanel extends JPanel {
             drawSun(g2d, centerX, centerY, currentScale);
         }
         
-        // === NEW: DRAW COMBINED GRAVITATIONAL FORCE VECTOR ===
-        if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled()) {
-            drawCombinedForceVector(g2d, centerX, centerY, currentScale);
+        // === FIXED: DRAW COMBINED GRAVITATIONAL ACCELERATION VECTOR ===
+        // Only show when BOTH lunar and solar effects are enabled
+        if (simulation.isLunarEffectsEnabled() && simulation.isSolarEffectsEnabled()) {
+            drawCombinedAccelerationVector(g2d, centerX, centerY, currentScale);
         }
         
         Satellite satellite = simulation.getSatellite();
@@ -215,7 +216,7 @@ public class SimulationPanel extends JPanel {
             
             // DRAW TRAIL: Show satellite's recent orbital path
             g2d.setColor(simulation.getTrailColor());
-            g2d.setStroke(new BasicStroke((float)Math.max(1, zoomFactor))); // Scale line thickness with zoom
+            g2d.setStroke(new BasicStroke(simulation.getTrailWidth() * (float)Math.max(1, zoomFactor))); // Scale line thickness with zoom and use trail width setting
             for (int i = 1; i < trail.size(); i++) {
                 Point p1 = trail.get(i - 1);
                 Point p2 = trail.get(i);
@@ -246,22 +247,22 @@ public class SimulationPanel extends JPanel {
         g2d.drawString(String.format("Zoom: %.1fx", zoomFactor), getWidth() - 100, 20);
         g2d.drawString("Mouse wheel: zoom, drag: pan", getWidth() - 200, getHeight() - 10);
         
-        // === NEW: Show combined force vector status ===
+        // === FIXED: Show effects status ===
         if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled()) {
             g2d.setColor(Color.YELLOW);
             String effectsStatus = "";
             if (simulation.isLunarEffectsEnabled() && simulation.isSolarEffectsEnabled()) {
                 effectsStatus = "Lunar + Solar Effects: ON";
+                // Add info about the blue acceleration vector
+                g2d.setColor(Color.CYAN);
+                g2d.drawString("Blue line = Combined acceleration vector", getWidth() - 280, 60);
             } else if (simulation.isLunarEffectsEnabled()) {
                 effectsStatus = "Lunar Effects: ON";
             } else if (simulation.isSolarEffectsEnabled()) {
                 effectsStatus = "Solar Effects: ON";
             }
+            g2d.setColor(Color.YELLOW);
             g2d.drawString(effectsStatus, getWidth() - 180, 40);
-            
-            // Add info about the blue force vector
-            g2d.setColor(Color.CYAN);
-            g2d.drawString("Blue line = Combined gravitational force", getWidth() - 250, 60);
         }
     }
     
@@ -395,103 +396,122 @@ public class SimulationPanel extends JPanel {
     }
     
     /**
-     * === NEW: Draws the combined gravitational force vector from Sun and Moon ===
+     * === FIXED: Draws the combined gravitational acceleration vector from Sun and Moon ===
+     * Only shows when BOTH lunar and solar effects are enabled
+     * Calculates actual acceleration imparted on the satellite, not just force
      * 
      * @param g2d Graphics context for drawing
      * @param centerX Screen X coordinate of Earth's center
      * @param centerY Screen Y coordinate of Earth's center  
      * @param currentScale Current meter-to-pixel conversion factor
      */
-    private void drawCombinedForceVector(Graphics2D g2d, int centerX, int centerY, double currentScale) {
-        double combinedForceX = 0;
-        double combinedForceY = 0;
+    private void drawCombinedAccelerationVector(Graphics2D g2d, int centerX, int centerY, double currentScale) {
+        // Get satellite position for accurate acceleration calculation
+        Satellite satellite = simulation.getSatellite();
+        if (satellite == null) return;
         
-        // Calculate lunar gravitational force if enabled
-        if (simulation.isLunarEffectsEnabled()) {
-            double[] moonPos = simulation.getMoonPosition();
-            double moonX = moonPos[0];
-            double moonY = moonPos[1];
+        double[] satPos = satellite.getPosition(); // Get 2D satellite position
+        double satX = satPos[0];
+        double satY = satPos[1];
+        
+        double combinedAccelX = 0;
+        double combinedAccelY = 0;
+        
+        // Calculate lunar gravitational acceleration
+        double[] moonPos = simulation.getMoonPosition();
+        double moonX = moonPos[0];
+        double moonY = moonPos[1];
+        
+        // Vector from satellite to Moon
+        double satToMoonX = moonX - satX;
+        double satToMoonY = moonY - satY;
+        double satMoonDistance = Math.sqrt(satToMoonX * satToMoonX + satToMoonY * satToMoonY);
+        
+        if (satMoonDistance > 0) {
+            // Gravitational acceleration: a = GM/r²
+            double moonMass = 7.342e22; // Moon mass in kg
+            double G = 6.67430e-11; // Gravitational constant
+            double moonAccelMagnitude = G * moonMass / (satMoonDistance * satMoonDistance);
             
-            // Calculate distance to Moon
-            double moonDistance = Math.sqrt(moonX * moonX + moonY * moonY);
-            if (moonDistance > 0) {
-                // Gravitational force magnitude: F = G * M * m / r²
-                // For visualization, we'll use a normalized force (ignore satellite mass and G)
-                double moonMass = 7.342e22; // Moon mass in kg
-                double moonForceMagnitude = moonMass / (moonDistance * moonDistance);
-                
-                // Force direction (unit vector toward Moon)
-                double moonForceX = (moonX / moonDistance) * moonForceMagnitude;
-                double moonForceY = (moonY / moonDistance) * moonForceMagnitude;
-                
-                combinedForceX += moonForceX;
-                combinedForceY += moonForceY;
-            }
+            // Direction unit vector (toward Moon)
+            double moonDirX = satToMoonX / satMoonDistance;
+            double moonDirY = satToMoonY / satMoonDistance;
+            
+            // Acceleration vector components
+            combinedAccelX += moonAccelMagnitude * moonDirX;
+            combinedAccelY += moonAccelMagnitude * moonDirY;
         }
         
-        // Calculate solar gravitational force if enabled
-        if (simulation.isSolarEffectsEnabled()) {
-            double[] sunPos = simulation.getSunPosition();
-            double sunX = sunPos[0];
-            double sunY = sunPos[1];
+        // Calculate solar gravitational acceleration
+        double[] sunPos = simulation.getSunPosition();
+        double sunX = sunPos[0];
+        double sunY = sunPos[1];
+        
+        // Vector from satellite to Sun
+        double satToSunX = sunX - satX;
+        double satToSunY = sunY - satY;
+        double satSunDistance = Math.sqrt(satToSunX * satToSunX + satToSunY * satToSunY);
+        
+        if (satSunDistance > 0) {
+            // Gravitational acceleration: a = GM/r²
+            double sunMass = 1.989e30; // Sun mass in kg
+            double G = 6.67430e-11; // Gravitational constant
+            double sunAccelMagnitude = G * sunMass / (satSunDistance * satSunDistance);
             
-            // Calculate distance to Sun
-            double sunDistance = Math.sqrt(sunX * sunX + sunY * sunY);
-            if (sunDistance > 0) {
-                // Gravitational force magnitude: F = G * M * m / r²
-                double sunMass = 1.989e30; // Sun mass in kg
-                double sunForceMagnitude = sunMass / (sunDistance * sunDistance);
-                
-                // Force direction (unit vector toward Sun)
-                double sunForceX = (sunX / sunDistance) * sunForceMagnitude;
-                double sunForceY = (sunY / sunDistance) * sunForceMagnitude;
-                
-                combinedForceX += sunForceX;
-                combinedForceY += sunForceY;
-            }
+            // Direction unit vector (toward Sun)
+            double sunDirX = satToSunX / satSunDistance;
+            double sunDirY = satToSunY / satSunDistance;
+            
+            // Acceleration vector components
+            combinedAccelX += sunAccelMagnitude * sunDirX;
+            combinedAccelY += sunAccelMagnitude * sunDirY;
         }
         
-        // If we have any force, draw the vector
-        double combinedForceMagnitude = Math.sqrt(combinedForceX * combinedForceX + combinedForceY * combinedForceY);
-        if (combinedForceMagnitude > 0) {
-            // Normalize the force vector for display
-            double forceDirectionX = combinedForceX / combinedForceMagnitude;
-            double forceDirectionY = combinedForceY / combinedForceMagnitude;
+        // Calculate combined acceleration magnitude and direction
+        double combinedAccelMagnitude = Math.sqrt(combinedAccelX * combinedAccelX + combinedAccelY * combinedAccelY);
+        if (combinedAccelMagnitude > 0) {
+            // Normalize the acceleration vector for display
+            double accelDirectionX = combinedAccelX / combinedAccelMagnitude;
+            double accelDirectionY = combinedAccelY / combinedAccelMagnitude;
             
-            // Scale the vector length for good visibility
-            // Make it proportional to force magnitude but cap it for readability
-            double baseLength = 150; // Base length in pixels
-            double scaleFactor = Math.log10(combinedForceMagnitude + 1) * 20; // Logarithmic scaling
-            double vectorLength = Math.min(baseLength + scaleFactor, 400); // Cap at 400 pixels
+            // Scale the vector length for visibility
+            // Use logarithmic scaling to handle the wide range of acceleration values
+            double baseLength = 100; // Base length in pixels
+            double scaleFactor = Math.log10(combinedAccelMagnitude * 1e6 + 1) * 15; // Scale factor
+            double vectorLength = Math.min(baseLength + scaleFactor, 300); // Cap at 300 pixels
             
-            // Calculate end point of force vector
-            int vectorEndX = centerX + (int)(forceDirectionX * vectorLength);
-            int vectorEndY = centerY - (int)(forceDirectionY * vectorLength); // Flip Y axis
+            // Get satellite screen position
+            int satScreenX = centerX + (int)(satX * currentScale);
+            int satScreenY = centerY - (int)(satY * currentScale);
             
-            // Draw the combined force vector as a thick blue line
+            // Calculate end point of acceleration vector
+            int vectorEndX = satScreenX + (int)(accelDirectionX * vectorLength);
+            int vectorEndY = satScreenY - (int)(accelDirectionY * vectorLength); // Flip Y axis
+            
+            // Draw the combined acceleration vector as a thick blue line
             g2d.setColor(Color.BLUE);
             g2d.setStroke(new BasicStroke(4.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g2d.drawLine(centerX, centerY, vectorEndX, vectorEndY);
+            g2d.drawLine(satScreenX, satScreenY, vectorEndX, vectorEndY);
             
             // Draw arrowhead to show direction
-            drawArrowHead(g2d, centerX, centerY, vectorEndX, vectorEndY, Color.BLUE);
+            drawArrowHead(g2d, satScreenX, satScreenY, vectorEndX, vectorEndY, Color.BLUE);
             
-            // Add a small blue circle at the start to mark the origin
+            // Add a small blue circle at the satellite position to mark the origin
             g2d.setColor(Color.BLUE);
-            g2d.fillOval(centerX - 4, centerY - 4, 8, 8);
+            g2d.fillOval(satScreenX - 3, satScreenY - 3, 6, 6);
             
             // Optional: Draw magnitude indicator text
-            if (vectorLength > 100) { // Only show text if vector is long enough
+            if (vectorLength > 80) { // Only show text if vector is long enough
                 g2d.setColor(Color.BLUE);
                 g2d.setFont(new Font("Arial", Font.BOLD, 10));
-                String magnitudeText = String.format("F: %.1e", combinedForceMagnitude);
+                String magnitudeText = String.format("a: %.2e m/s²", combinedAccelMagnitude);
                 
                 // Position text near the end of vector
                 int textX = vectorEndX + 10;
                 int textY = vectorEndY - 5;
                 
                 // Keep text on screen
-                if (textX > getWidth() - 60) textX = vectorEndX - 60;
+                if (textX > getWidth() - 80) textX = vectorEndX - 80;
                 if (textY < 15) textY = vectorEndY + 15;
                 
                 g2d.drawString(magnitudeText, textX, textY);
@@ -529,7 +549,9 @@ public class SimulationPanel extends JPanel {
         g2d.drawLine(endX, endY, (int)leftX, (int)leftY);
         g2d.drawLine(endX, endY, (int)rightX, (int)rightY);
     }
-    /*
+    
+    /**
+     * Draws the complete elliptical orbital path
      * 
      * @param g2d Graphics context for drawing
      * @param centerX Screen X coordinate of Earth's center
@@ -584,7 +606,7 @@ public class SimulationPanel extends JPanel {
             String.format("True Anomaly: %.1f°", Math.toDegrees(satellite.getTrueAnomaly()))
         };
         
-        // === NEW: Add solar effects information if enabled ===
+        // === FIXED: Add effects information if enabled ===
         if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled()) {
             String[] expandedInfo = new String[info.length + (simulation.isLunarEffectsEnabled() ? 2 : 0) + (simulation.isSolarEffectsEnabled() ? 2 : 0)];
             System.arraycopy(info, 0, expandedInfo, 0, info.length);

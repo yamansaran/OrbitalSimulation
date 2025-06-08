@@ -1,4 +1,3 @@
-// Import necessary Java libraries for GUI, graphics, events, and data structures
 import javax.swing.*;
 import javax.swing.Timer;
 
@@ -42,6 +41,7 @@ public class OrbitalSimulation extends JFrame {
     // Display constants (now configurable)
     private double baseScale = 5e-6; // Base scale factor for converting meters to pixels
     private int maxTrailLength = 500; // Maximum trail points
+    private float trailWidth = 1.0f; // Trail line width in pixels
     private Color earthColor = new Color(100, 149, 237); // Earth body color
     private Color earthOutlineColor = new Color(34, 139, 34); // Earth outline color
     private Color satelliteColor = Color.RED; // Satellite color
@@ -142,6 +142,7 @@ public class OrbitalSimulation extends JFrame {
     public Color getMoonColor() { return moonColor; }
     public int getSatelliteSize() { return satelliteSize; }
     public int getMaxTrailLength() { return maxTrailLength; }
+    public float getTrailWidth() { return trailWidth; }
     public double getSemiMajorAxis() { return semiMajorAxis; }
     public double getEccentricity() { return eccentricity; }
     public Satellite getSatellite() { return satellite; }
@@ -348,6 +349,8 @@ public class OrbitalSimulation extends JFrame {
                 info.append("• Complex multi-body dynamics\n");
                 info.append("• Resonances and secular variations\n");
                 info.append("• Enhanced orbital evolution\n");
+                info.append("• Blue acceleration vector will be displayed\n");
+                info.append("  showing combined gravitational forces\n");
             }
             
             infoArea.setText(info.toString());
@@ -611,7 +614,7 @@ public class OrbitalSimulation extends JFrame {
         }
     }
     
-    /**
+      /**
      * Shows the celestial body selection dialog
      */
     private void showCelestialBodyDialog() {
@@ -891,6 +894,7 @@ public class OrbitalSimulation extends JFrame {
         
         JTextField trailLengthField = new JTextField(String.valueOf(maxTrailLength), 10);
         JSlider trailOpacitySlider = new JSlider(0, 255, trailColor.getAlpha());
+        JTextField trailWidthField = new JTextField(String.valueOf(trailWidth), 10);
         
         gbc.gridy = 0;
         gbc.gridx = 0; trailPanel.add(new JLabel("Trail Length (points):"), gbc);
@@ -899,6 +903,10 @@ public class OrbitalSimulation extends JFrame {
         gbc.gridy = 1;
         gbc.gridx = 0; trailPanel.add(new JLabel("Trail Opacity:"), gbc);
         gbc.gridx = 1; trailPanel.add(trailOpacitySlider, gbc);
+        
+        gbc.gridy = 2;
+        gbc.gridx = 0; trailPanel.add(new JLabel("Trail Width (pixels):"), gbc);
+        gbc.gridx = 1; trailPanel.add(trailWidthField, gbc);
         
         tabbedPane.add("Trail", trailPanel);
         
@@ -1019,6 +1027,11 @@ public class OrbitalSimulation extends JFrame {
                 maxTrailLength = Integer.parseInt(trailLengthField.getText());
                 trailColor = new Color(trailColor.getRed(), trailColor.getGreen(), 
                                      trailColor.getBlue(), trailOpacitySlider.getValue());
+                trailWidth = Float.parseFloat(trailWidthField.getText());
+                
+                // Validate trail width
+                if (trailWidth < 0.1f) trailWidth = 0.1f;
+                if (trailWidth > 20.0f) trailWidth = 20.0f;
                 
                 // Apply scale settings
                 baseScale = Double.parseDouble(baseScaleField.getText());
@@ -1045,6 +1058,12 @@ public class OrbitalSimulation extends JFrame {
                 maxTrailLength = Integer.parseInt(trailLengthField.getText());
                 trailColor = new Color(trailColor.getRed(), trailColor.getGreen(), 
                                      trailColor.getBlue(), trailOpacitySlider.getValue());
+                trailWidth = Float.parseFloat(trailWidthField.getText());
+                
+                // Validate trail width
+                if (trailWidth < 0.1f) trailWidth = 0.1f;
+                if (trailWidth > 20.0f) trailWidth = 20.0f;
+                
                 baseScale = Double.parseDouble(baseScaleField.getText());
                 satelliteSize = Integer.parseInt(satSizeField.getText());
                 int newDelay = Integer.parseInt(animDelayField.getText());
@@ -1097,6 +1116,7 @@ public class OrbitalSimulation extends JFrame {
             // Reset display settings
             baseScale = 5e-6;
             maxTrailLength = 500;
+            trailWidth = 1.0f;
             earthColor = new Color(100, 149, 237);
             earthOutlineColor = new Color(34, 139, 34);
             satelliteColor = Color.RED;
