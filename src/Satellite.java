@@ -1,7 +1,7 @@
 /**
  * Satellite class that handles orbital mechanics calculations
  * Implements Kepler's laws and coordinate transformations
- * Enhanced with lunar gravitational perturbations
+ * Enhanced with lunar and solar gravitational perturbations using separate force calculators
  */
 public class Satellite {
     private double a, e, i, omega, Omega; // Orbital elements
@@ -10,15 +10,12 @@ public class Satellite {
     private double gravitationalConstant;
     private double earthMass;
     
-    // === NEW: Lunar and Solar effects system ===
+    // === NEW: Lunar and Solar effects system with separate calculators ===
     private boolean lunarEffectsEnabled;
     private boolean solarEffectsEnabled;
     private OrbitalSimulation simulation; // Reference to get Moon/Sun position and time
-    private static final double MOON_MASS = 7.342e22; // Moon's mass in kg
-    private static final double SUN_MASS = 1.989e30; // Sun's mass in kg
-    private static final double MOON_EARTH_DISTANCE = 384400000; // Average Moon-Earth distance in meters
-    private static final double SUN_EARTH_DISTANCE = 149597870700.0; // Average Sun-Earth distance in meters (1 AU); // Reference to get Moon position and time
-    
+    private LunarForceCalculator lunarCalculator; // Separate lunar force calculator
+    private SolarForceCalculator solarCalculator; // Separate solar force calculator
     
     // Perturbation tracking for orbital element drift
     private double deltaOmega = 0; // Accumulated change in argument of periapsis
@@ -43,6 +40,10 @@ public class Satellite {
         this.lunarEffectsEnabled = lunarEffectsEnabled;
         this.solarEffectsEnabled = solarEffectsEnabled;
         this.simulation = simulation;
+        
+        // Initialize force calculators
+        this.lunarCalculator = new LunarForceCalculator();
+        this.solarCalculator = new SolarForceCalculator();
         
         // Calculate mean motion using Kepler's third law: n = √(μ/a³)
         double mu = gravitationalConstant * earthMass; // Standard gravitational parameter
@@ -99,10 +100,10 @@ public class Satellite {
         // === Apply lunar and solar perturbations if enabled (before updating position) ===
         if ((lunarEffectsEnabled || solarEffectsEnabled) && simulation != null) {
             if (lunarEffectsEnabled) {
-                applyLunarPerturbations(deltaTime);
+                lunarCalculator.applyPerturbations(this, deltaTime, simulation);
             }
             if (solarEffectsEnabled) {
-                applySolarPerturbations(deltaTime);
+                solarCalculator.applyPerturbations(this, deltaTime, simulation);
             }
         }
         
@@ -181,158 +182,41 @@ public class Satellite {
         return angleDiff;
     }
     
-    /**
-     * === NEW: Applies lunar gravitational perturbations to orbital elements ===
-     * 
-     * This method simulates the Moon's gravitational influence on the satellite's orbit.
-     * The perturbations cause gradual changes in the orbital elements over time.
-     * Now uses scaled perturbations for numerical stability at high speeds.
-     * 
-     * @param deltaTime Time step in seconds
-     */
-    private void applyLunarPerturbations(double deltaTime) {
-        // Get current Moon position relative to Earth
-        double[] moonPos = simulation.getMoonPosition();
-        double moonX = moonPos[0];
-        double moonY = moonPos[1];
-        double moonZ = 0; // Assume Moon stays in Earth's equatorial plane for simplification
-        
-        // Get current satellite position
-        double[] satPos = getPosition3D(); // Get 3D position including Z component
-        double satX = satPos[0];
-        double satY = satPos[1];
-        double satZ = satPos[2];
-        
-        // Calculate distance vectors
-        double moonDistance = Math.sqrt(moonX*moonX + moonY*moonY + moonZ*moonZ);
-        double satDistance = Math.sqrt(satX*satX + satY*satY + satZ*satZ);
-        
-        // Distance from satellite to Moon
-        double satMoonDx = satX - moonX;
-        double satMoonDy = satY - moonY;
-        double satMoonDz = satZ - moonZ;
-        double satMoonDistance = Math.sqrt(satMoonDx*satMoonDx + satMoonDy*satMoonDy + satMoonDz*satMoonDz);
-        
-        // Avoid division by zero and unrealistic scenarios
-        if (satMoonDistance < 1000 || moonDistance < 1000) return;
-        
-        // Calculate lunar perturbation strength based on satellite's orbital characteristics
-        // Higher altitude satellites are more affected by lunar perturbations
-        double perturbationStrength = calculatePerturbationStrength(satDistance, satMoonDistance);
-        
-        // === NEW: Scale perturbations based on time step to maintain stability ===
-        double timeStepScale = Math.min(1.0, deltaTime / 1.0); // Normalize to 1-second steps
-        double scaledStrength = perturbationStrength * timeStepScale;
-        
-        // Apply perturbations to orbital elements with improved numerical stability
-        // These are simplified models of how the Moon affects satellite orbits
-        
-        // 1. Longitude of Ascending Node precession (most significant effect)
-        // The Moon causes the orbital plane to slowly rotate
-        double nodePrecessRate = scaledStrength * 1e-8 * Math.cos(i) * deltaTime; // Reduced and scaled
-        deltaOmegaCapital += nodePrecessRate;
-        Omega += nodePrecessRate;
-        
-        // 2. Argument of periapsis rotation
-        // The orientation of the ellipse within the orbital plane changes
-        double periapsisRotationRate = scaledStrength * 5e-9 * (1 - e*e) * deltaTime; // Reduced and scaled
-        deltaOmega += periapsisRotationRate;
-        omega += periapsisRotationRate;
-        
-        // 3. Inclination oscillation (smaller effect)
-        // The orbital plane tilt oscillates slightly
-        double inclinationOscillation = scaledStrength * 1e-10 * Math.sin(2 * nu) * deltaTime; // Much reduced
-        deltaI += inclinationOscillation;
-        i += inclinationOscillation;
-        
-        // 4. Semi-major axis variation (very small effect)
-        // The orbit size can change slightly due to energy transfer
-        double semiMajorAxisVariation = scaledStrength * 1e-4 * Math.sin(nu) * deltaTime; // Reduced
-        a += semiMajorAxisVariation;
-        
-        // 5. Eccentricity variation (very small effect)
-        // The orbit shape can change slightly
-        double eccentricityVariation = scaledStrength * 1e-11 * Math.cos(nu) * deltaTime; // Much reduced
-        e += eccentricityVariation;
-        
-        // Note: Bounds checking and normalization is now handled in validateOrbitalElements()
-    }
+  
     
     /**
-     * === NEW: Applies solar gravitational perturbations to orbital elements ===
-     * 
-     * This method simulates the Sun's gravitational influence on the satellite's orbit.
-     * Solar effects are generally weaker than lunar effects but occur over longer periods.
-     * Most significant for high-altitude satellites and highly eccentric orbits.
-     * 
-     * @param deltaTime Time step in seconds
+     * === NEW: Getter methods for orbital elements (needed by force calculators) ===
      */
-    private void applySolarPerturbations(double deltaTime) {
-        // Get current Sun position relative to Earth
-        double[] sunPos = simulation.getSunPosition();
-        double sunX = sunPos[0];
-        double sunY = sunPos[1];
-        double sunZ = 0; // Assume Sun stays in Earth's equatorial plane for simplification
-        
-        // Get current satellite position
-        double[] satPos = getPosition3D(); // Get 3D position including Z component
-        double satX = satPos[0];
-        double satY = satPos[1];
-        double satZ = satPos[2];
-        
-        // Calculate distance vectors
-        double sunDistance = Math.sqrt(sunX*sunX + sunY*sunY + sunZ*sunZ);
-        double satDistance = Math.sqrt(satX*satX + satY*satY + satZ*satZ);
-        
-        // Distance from satellite to Sun
-        double satSunDx = satX - sunX;
-        double satSunDy = satY - sunY;
-        double satSunDz = satZ - sunZ;
-        double satSunDistance = Math.sqrt(satSunDx*satSunDx + satSunDy*satSunDy + satSunDz*satSunDz);
-        
-        // Avoid division by zero and unrealistic scenarios
-        if (satSunDistance < 10000000 || sunDistance < 100000000) return; // 10,000 km and 100,000 km minimums
-        
-        // Calculate solar perturbation strength
-        double perturbationStrength = calculateSolarPerturbationStrength(satDistance, satSunDistance);
-        
-        // === Scale perturbations based on time step to maintain stability ===
-        double timeStepScale = Math.min(1.0, deltaTime / 1.0); // Normalize to 1-second steps
-        double scaledStrength = perturbationStrength * timeStepScale;
-        
-        // Apply solar perturbations to orbital elements
-        // Solar effects are generally weaker but more long-term than lunar effects
-        
-        // 1. Longitude of Ascending Node precession (very slow)
-        // Solar perturbations cause gradual nodal precession
-        double solarNodePrecessRate = scaledStrength * 2e-9 * Math.cos(i) * deltaTime; // Much smaller than lunar
-        deltaOmegaCapital += solarNodePrecessRate;
-        Omega += solarNodePrecessRate;
-        
-        // 2. Argument of periapsis rotation (secular variations)
-        // The apsidal line slowly rotates due to solar influence
-        double solarPeriapsisRotationRate = scaledStrength * 1e-9 * (1 - e*e) * deltaTime;
-        deltaOmega += solarPeriapsisRotationRate;
-        omega += solarPeriapsisRotationRate;
-        
-        // 3. Eccentricity variations (most significant solar effect)
-        // Solar gravity can pump or damp orbital eccentricity over long periods
-        double eccentricityPumping = scaledStrength * 2e-11 * Math.cos(2 * nu) * deltaTime;
-        e += eccentricityPumping;
-        
-        // 4. Inclination variations (long-term secular changes)
-        // Solar perturbations can cause slow inclination changes
-        double inclinationVariation = scaledStrength * 5e-11 * Math.sin(nu) * deltaTime;
-        deltaI += inclinationVariation;
-        i += inclinationVariation;
-        
-        // 5. Semi-major axis variations (energy changes)
-        // Solar gravity can cause very small orbital energy changes
-        double solarSmaVariation = scaledStrength * 1e-5 * Math.sin(2 * nu) * deltaTime;
-        a += solarSmaVariation;
-        
-        // Note: Bounds checking and normalization is handled in validateOrbitalElements()
+    public double getInclination() { return i; }
+    public double getEccentricity() { return e; }
+    public double getEarthMass() { return earthMass; }
+    
+    /**
+     * === NEW: Adjustment methods for orbital elements (used by force calculators) ===
+     */
+    public void adjustLongitudeOfAscendingNode(double delta) {
+        deltaOmegaCapital += delta;
+        Omega += delta;
     }
+    
+    public void adjustArgumentOfPeriapsis(double delta) {
+        deltaOmega += delta;
+        omega += delta;
+    }
+    
+    public void adjustInclination(double delta) {
+        deltaI += delta;
+        i += delta;
+    }
+    
+    public void adjustSemiMajorAxis(double delta) {
+        a += delta;
+    }
+    
+    public void adjustEccentricity(double delta) {
+        e += delta;
+    }
+    
     
     /**
      * === NEW: Calculates the strength of solar perturbations ===
@@ -342,59 +226,9 @@ public class Satellite {
      * @param satSunDistance Distance from satellite to Sun
      * @return Solar perturbation strength factor
      */
-    private double calculateSolarPerturbationStrength(double satDistance, double satSunDistance) {
-        // Solar perturbation strength calculation
-        double earthSunMassRatio = SUN_MASS / earthMass; // ~333,000 (much larger than Moon ratio)
-        double distanceRatio = satDistance / SUN_EARTH_DISTANCE; // Satellite distance relative to Sun orbit
-        double proximityFactor = 1.0 / Math.max(0.5, satSunDistance / SUN_EARTH_DISTANCE); // How close satellite is to Sun
-        
-        // Apply smoothing to prevent sudden changes
-        double minProximity = 0.5; // Minimum proximity factor
-        double maxProximity = 2.0; // Maximum proximity factor (Sun is much farther than Moon)
-        proximityFactor = Math.max(minProximity, Math.min(maxProximity, proximityFactor));
-        
-        // Solar perturbations are stronger for:
-        // - Higher altitude satellites (larger distanceRatio)
-        // - When satellite is closer to Sun (larger proximityFactor)
-        // But the Sun is much farther away, so effects are generally weaker
-        double strength = earthSunMassRatio * distanceRatio * proximityFactor;
-        
-        // Apply much smaller scaling factor than lunar effects
-        // Solar effects are primarily long-term secular changes
-        return strength * 0.001; // Much smaller scale factor than lunar (1000x smaller)
-    }
+  
     
-    /**
-     * === NEW: Calculates the strength of lunar perturbations ===
-     * Now includes smoothing for numerical stability
-     * 
-     * @param satDistance Distance from Earth center to satellite
-     * @param satMoonDistance Distance from satellite to Moon
-     * @return Perturbation strength factor
-     */
-    private double calculatePerturbationStrength(double satDistance, double satMoonDistance) {
-        // Basic perturbation strength based on distances and masses
-        // This is a simplified model - real perturbations are much more complex
-        
-        double earthMoonMassRatio = MOON_MASS / earthMass; // ~0.012
-        double distanceRatio = satDistance / MOON_EARTH_DISTANCE; // Satellite distance relative to Moon orbit
-        double proximityFactor = 1.0 / Math.max(1.0, satMoonDistance / MOON_EARTH_DISTANCE); // How close satellite is to Moon
-        
-        // Apply smoothing to prevent sudden changes in perturbation strength
-        double minProximity = 0.1; // Minimum proximity factor to prevent extreme perturbations
-        double maxProximity = 10.0; // Maximum proximity factor to prevent instability
-        proximityFactor = Math.max(minProximity, Math.min(maxProximity, proximityFactor));
-        
-        // Perturbations are stronger for:
-        // - Higher altitude satellites (larger distanceRatio)
-        // - When satellite is closer to Moon (larger proximityFactor)
-        double strength = earthMoonMassRatio * distanceRatio * proximityFactor;
-        
-        // Apply scaling factor to make effects visible in simulation timeframes
-        // Real lunar perturbations occur over months/years, we compress this for visualization
-        // Reduced scaling for better numerical stability
-        return strength * 100; // Reduced scale factor for smoother operation
-    }
+   
     
     /**
      * === NEW: Normalizes angle to [0, 2π] range ===

@@ -20,7 +20,7 @@ public class SimulationPanel extends JPanel {
     private double offsetY = 0; // Vertical pan offset
     
     // Satellite trail for showing recent orbital path
-    private List<Point> trail = new ArrayList<>();
+    private List<Point2D.Double> trail = new ArrayList<>(); // Changed to store world coordinates
     
     // Reference to the main simulation for accessing parameters
     private OrbitalSimulation simulation;
@@ -208,19 +208,26 @@ public class SimulationPanel extends JPanel {
             int satX = centerX + (int) (pos[0] * currentScale); // Convert to screen X
             int satY = centerY - (int) (pos[1] * currentScale); // Convert to screen Y (flip Y axis)
             
-            // UPDATE TRAIL: Add current position to satellite trail
-            trail.add(new Point(satX, satY));
+            // UPDATE TRAIL: Add current position to satellite trail (store in world coordinates)
+            trail.add(new Point2D.Double(pos[0], pos[1])); // Store actual world position in meters
             if (trail.size() > simulation.getMaxTrailLength()) {
                 trail.remove(0); // Remove oldest point to maintain trail length
             }
             
-            // DRAW TRAIL: Show satellite's recent orbital path
+            // DRAW TRAIL: Show satellite's recent orbital path (convert world coords to screen coords)
             g2d.setColor(simulation.getTrailColor());
             g2d.setStroke(new BasicStroke(simulation.getTrailWidth() * (float)Math.max(1, zoomFactor))); // Scale line thickness with zoom and use trail width setting
             for (int i = 1; i < trail.size(); i++) {
-                Point p1 = trail.get(i - 1);
-                Point p2 = trail.get(i);
-                g2d.drawLine(p1.x, p1.y, p2.x, p2.y); // Connect consecutive trail points
+                Point2D.Double p1World = trail.get(i - 1);
+                Point2D.Double p2World = trail.get(i);
+                
+                // Convert world coordinates to screen coordinates
+                int p1x = centerX + (int)(p1World.x * currentScale);
+                int p1y = centerY - (int)(p1World.y * currentScale);
+                int p2x = centerX + (int)(p2World.x * currentScale);
+                int p2y = centerY - (int)(p2World.y * currentScale);
+                
+                g2d.drawLine(p1x, p1y, p2x, p2y); // Connect consecutive trail points
             }
             
             // DRAW SATELLITE: Render satellite as an image or colored dot

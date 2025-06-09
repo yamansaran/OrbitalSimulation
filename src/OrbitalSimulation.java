@@ -74,7 +74,7 @@ public class OrbitalSimulation extends JFrame {
     private boolean useEquinoctialElements = false;
     
     // Auto-clear trail settings
-    private boolean autoClearOnZoom = true; // Auto-clear trail when zooming
+    private boolean autoClearOnZoom = false; // Auto-clear trail when zooming
     private boolean autoClearOnUpdate = true; // Auto-clear trail when updating orbit
     
     // Current celestial body settings
