@@ -15,112 +15,93 @@ import java.time.format.DateTimeFormatter;
 
 /**
  * Orbital Mechanics Simulation Program By Yaman Saran
- * Enhanced with Lunar Effects
+ * Enhanced with Lunar Effects and Date/Time Control
  * 
- * This program simulates satellite orbits around Earth using Kepler's laws and Newton's law of gravitation.
- * It supports both classical orbital elements (a, e, i, ω, Ω) and equinoctial elements (a, h, k, p, q).
- * Now includes lunar gravitational effects that can be toggled on/off.
- * Modified to use extracted classes for trail management, coordinate transformations, and dialog management.
- * Updated image paths to look in src/resources/ folder.
- * 
- * Mathematical Foundation:
- * - Uses Kepler's equation to solve orbital motion: M = E - e⋅sin(E)
- * - Implements coordinate transformations from orbital plane to 3D space
- * - Converts between classical and equinoctial element representations
- * - Simulates lunar gravitational perturbations on satellite orbits
+ * Now includes ability to change simulation date/time while paused,
+ * with celestial bodies updating to their correct positions.
  */
 public class OrbitalSimulation extends JFrame {
     // Window dimensions and layout constants
     private static final int WINDOW_WIDTH = 1000;
     private static final int WINDOW_HEIGHT = 800;
-    private static final int CONTROL_PANEL_HEIGHT = 320; // Increased for new controls
+    private static final int CONTROL_PANEL_HEIGHT = 320;
     
     // Physical constants for Earth and orbital mechanics (now configurable)
-    private double earthRadius = 6371000; // Earth's radius in meters
-    private double gravitationalConstant = 6.67430e-11; // Gravitational constant in m³/kg⋅s²
-    private double earthMass = 5.972e24; // Earth's mass in kg
+    private double earthRadius = 6371000;
+    private double gravitationalConstant = 6.67430e-11;
+    private double earthMass = 5.972e24;
     
     // Display constants (now configurable)
-    private double baseScale = 5e-6; // Base scale factor for converting meters to pixels
-    private int maxTrailLength = 500; // Maximum trail points
-    private float trailWidth = 1.0f; // Trail line width in pixels
-    private Color earthColor = new Color(100, 149, 237); // Earth body color
-    private Color earthOutlineColor = new Color(34, 139, 34); // Earth outline color
-    private Color satelliteColor = Color.RED; // Satellite color
-    private Color trailColor = new Color(255, 255, 0, 100); // Trail color (semi-transparent yellow)
-    private Color orbitColor = new Color(255, 255, 255, 80); // Orbit path color
-    private Color moonColor = new Color(192, 192, 192); // Moon color
-    private int satelliteSize = 4; // Base satellite size in pixels
-    private int animationDelay = 50; // Animation timer delay in milliseconds
+    private double baseScale = 5e-6;
+    private int maxTrailLength = 500;
+    private float trailWidth = 1.0f;
+    private Color earthColor = new Color(100, 149, 237);
+    private Color earthOutlineColor = new Color(34, 139, 34);
+    private Color satelliteColor = Color.RED;
+    private Color trailColor = new Color(255, 255, 0, 100);
+    private Color orbitColor = new Color(255, 255, 255, 80);
+    private Color moonColor = new Color(192, 192, 192);
+    private int satelliteSize = 4;
+    private int animationDelay = 50;
     
     // GUI components for simulation display and animation control
-    private SimulationPanel simulationPanel; // Custom panel for drawing the orbital simulation
-    private Timer animationTimer; // Swing timer for smooth animation updates
-    private double timeMultiplier = 1.0; // Speed multiplier for time progression (1.0 = real time)
-    private boolean isPaused = false; // Flag to control animation pause/resume
+    private SimulationPanel simulationPanel;
+    private Timer animationTimer;
+    private double timeMultiplier = 1.0;
+    private boolean isPaused = false;
     
     // Dialog manager for handling all dialogs
     private OrbitalDialogManager dialogManager;
     
-    // Classical orbital elements (Keplerian elements)
-    // These define the shape, size, and orientation of an orbit
-    private double semiMajorAxis = 7000000; // 'a' - half the major axis, defines orbit size (meters)
-    private double eccentricity = 0.1; // 'e' - orbit shape (0=circle, 0-1=ellipse, 1=parabola)
-    private double inclination = 0; // 'i' - orbit plane tilt relative to equator (degrees)
-    private double argumentOfPeriapsis = 0; // 'ω' - orientation of ellipse in orbital plane (degrees)
-    private double longitudeOfAscendingNode = 0; // 'Ω' - rotation of orbital plane (degrees)
-    private double trueAnomaly = 0; // 'ν' - satellite's position along orbit (degrees)
+    // Classical orbital elements
+    private double semiMajorAxis = 7000000;
+    private double eccentricity = 0.1;
+    private double inclination = 0;
+    private double argumentOfPeriapsis = 0;
+    private double longitudeOfAscendingNode = 0;
+    private double trueAnomaly = 0;
     
     // Satellite object that handles orbital mechanics calculations
     private Satellite satellite;
     
     // Flag to switch between classical and equinoctial element input modes
-    // Equinoctial elements avoid singularities for circular/equatorial orbits
     private boolean useEquinoctialElements = false;
     
     // Auto-clear trail settings
-    private boolean autoClearOnZoom = false; // Auto-clear trail when zooming
-    private boolean autoClearOnUpdate = true; // Auto-clear trail when updating orbit
+    private boolean autoClearOnZoom = false;
+    private boolean autoClearOnUpdate = true;
     
     // Current celestial body settings
     private String currentBody = "Earth";
     private BufferedImage celestialBodyImage;
     
     // Current satellite settings
-    private String currentSatelliteType = "Default"; // Default satellite type
+    private String currentSatelliteType = "Default";
     private BufferedImage satelliteImage;
     
-    // === NEW: Lunar and Solar Effects System ===
-    private boolean lunarEffectsEnabled = false; // Toggle for lunar gravitational effects
-    private boolean solarEffectsEnabled = false; // Toggle for solar gravitational effects
-    private long simulationStartTime; // Unix timestamp for simulation start (January 1, 1970 00:00:00 UTC)
-    private double currentSimulationTime; // Current simulation time in seconds since start
-    private static final double LUNAR_ORBITAL_PERIOD = 29.530 * 24 * 3600; // Lunar cycle in seconds (29.530 days)
-    private static final double SOLAR_ORBITAL_PERIOD = 365.25 * 24 * 3600; // Solar year in seconds (365.25 days)
-    private static final double INITIAL_MOON_ANGLE = 84.7; // Moon's initial position in degrees east
-    private static final double INITIAL_SUN_ANGLE = 281.0; // Sun's initial position in degrees (Jan 1, 1970)
-    private static final double MOON_EARTH_DISTANCE = 384400000; // Average Moon-Earth distance in meters
-    private static final double SUN_EARTH_DISTANCE = 149597870700.0; // Average Sun-Earth distance in meters (1 AU)
-    private static final double MOON_MASS = 7.342e22; // Moon's mass in kg
-    private static final double SUN_MASS = 1.989e30; // Sun's mass in kg
-    private Color sunColor = new Color(255, 255, 0); // Sun color
-    private JLabel dateTimeLabel; // Label to display current simulation date/time
+    // === ENHANCED: Lunar and Solar Effects System with Date/Time Control ===
+    private boolean lunarEffectsEnabled = false;
+    private boolean solarEffectsEnabled = false;
+    private long simulationStartTime;
+    private double currentSimulationTime; // Current simulation time in seconds since Unix epoch
+    private static final double LUNAR_ORBITAL_PERIOD = 29.530 * 24 * 3600;
+    private static final double SOLAR_ORBITAL_PERIOD = 365.25 * 24 * 3600;
+    private static final double INITIAL_MOON_ANGLE = 84.7;
+    private static final double INITIAL_SUN_ANGLE = 281.0;
+    private static final double MOON_EARTH_DISTANCE = 384400000;
+    private static final double SUN_EARTH_DISTANCE = 149597870700.0;
+    private static final double MOON_MASS = 7.342e22;
+    private static final double SUN_MASS = 1.989e30;
+    private Color sunColor = new Color(255, 255, 0);
+    private JLabel dateTimeLabel;
     
-    // Available satellite types (can be expanded by adding PNG files to src/resources folder)
+    // Available satellite types
     private static final String[] SATELLITE_TYPES = {
-        "Default",      // Uses colored dot
-        "Satellite1",   // Uses Satellite1.png
-        "Satellite2",   // Uses Satellite2.png  
-        "Satellite3",   // Uses Satellite3.png
-        "ISS",          // Uses ISS.png
-        "Hubble",       // Uses Hubble.png
-        "Voyager",      // Uses Voyager.png
-        "Sputnik",       // Uses Sputnik.png
-        "Millennium Falcon" // Uses Millenium Falcon.png
-        // Add more satellite types here as needed
+        "Default", "Satellite1", "Satellite2", "Satellite3", "ISS", 
+        "Hubble", "Voyager", "Sputnik", "Millennium Falcon"
     };
     
-    // Celestial body data: name -> {radius_km, mass_kg, gravitational_constant}
+    // Celestial body data
     private static final Map<String, double[]> CELESTIAL_BODIES = new HashMap<String, double[]>() {{
         put("Sun", new double[]{696340000, 1.989e30, 6.67430e-11});
         put("Mercury", new double[]{2439700, 3.301e23, 6.67430e-11});
@@ -133,18 +114,17 @@ public class OrbitalSimulation extends JFrame {
         put("Uranus", new double[]{25362000, 8.681e25, 6.67430e-11});
         put("Neptune", new double[]{24622000, 1.024e26, 6.67430e-11});
         put("Pluto", new double[]{1188300, 1.309e22, 6.67430e-11});
-        put("Tatooine", new double[]{5232500, 3e24, 6.67430e-11}); // Diameter 10,465km -> radius 5,232.5km
+        put("Tatooine", new double[]{5232500, 3e24, 6.67430e-11});
     }};
 
     /**
      * Constructor: Sets up the main window and initializes all components
      */
     public OrbitalSimulation() {
-        // Configure the main window properties
         setTitle("Orbital Mechanics Simulation");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // Exit program when window is closed
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(WINDOW_WIDTH, WINDOW_HEIGHT);
-        setLocationRelativeTo(null); // Center window on screen
+        setLocationRelativeTo(null);
         
         // Initialize simulation time (January 1, 1970 00:00:00 UTC)
         simulationStartTime = 0; // Unix timestamp 0
@@ -165,7 +145,7 @@ public class OrbitalSimulation extends JFrame {
      * Sets up the main window layout with simulation panel and control panel
      */
     private void initializeComponents() {
-        setLayout(new BorderLayout()); // Use border layout for main window
+        setLayout(new BorderLayout());
         
         // Create menu bar with options
         createMenuBar();
@@ -180,7 +160,7 @@ public class OrbitalSimulation extends JFrame {
     }
     
     /**
-     * Creates the menu bar with options menu - now uses DialogManager
+     * Creates the menu bar with options menu - now includes Date/Time option
      */
     private void createMenuBar() {
         JMenuBar menuBar = new JMenuBar();
@@ -188,7 +168,14 @@ public class OrbitalSimulation extends JFrame {
         // Options menu
         JMenu optionsMenu = new JMenu("Options");
         
-        // All dialog menu items now delegate to DialogManager
+        // Date/Time menu item - NEW
+        JMenuItem dateTimeItem = new JMenuItem("Set Date/Time...");
+        dateTimeItem.addActionListener(e -> dialogManager.showDateTimeDialog());
+        optionsMenu.add(dateTimeItem);
+        
+        optionsMenu.addSeparator();
+        
+        // All existing dialog menu items
         JMenuItem orbitalParamsItem = new JMenuItem("Orbital Parameters...");
         orbitalParamsItem.addActionListener(e -> dialogManager.showOrbitalParametersDialog());
         optionsMenu.add(orbitalParamsItem);
@@ -228,6 +215,29 @@ public class OrbitalSimulation extends JFrame {
     }
     
     /**
+     * === NEW: Updates the date/time label with current simulation time ===
+     */
+    public void updateDateTimeDisplay() {
+        LocalDateTime dateTime = LocalDateTime.of(1970, 1, 1, 0, 0, 0).plusSeconds((long)currentSimulationTime);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm:ss");
+        dateTimeLabel.setText(formatter.format(dateTime) + " UTC");
+    }
+    
+    /**
+     * === NEW: Sets the current simulation time (used by Date/Time dialog) ===
+     */
+    public void setCurrentSimulationTime(double time) {
+        this.currentSimulationTime = time;
+    }
+    
+    /**
+     * === NEW: Returns whether simulation is paused (needed by Date/Time dialog) ===
+     */
+    public boolean isPaused() {
+        return isPaused;
+    }
+    
+    /**
      * Sets the current satellite type and loads the corresponding image
      */
     public void setSatelliteType(String satelliteType) {
@@ -241,19 +251,17 @@ public class OrbitalSimulation extends JFrame {
      */
     private void loadSatelliteImage() {
         if (currentSatelliteType.equals("Default")) {
-            // Use colored dot for default type
             satelliteImage = null;
             return;
         }
         
         try {
-            String imagePath = "src/resources/" + currentSatelliteType + ".png"; // UPDATED PATH
+            String imagePath = "src/resources/" + currentSatelliteType + ".png";
             File imageFile = new File(imagePath);
             if (imageFile.exists()) {
                 satelliteImage = ImageIO.read(imageFile);
                 System.out.println("Loaded satellite image: " + imagePath);
             } else {
-                // If image doesn't exist, use null (will fall back to colored dot)
                 satelliteImage = null;
                 System.out.println("Satellite image not found: " + imagePath + " - using colored dot instead");
             }
@@ -271,29 +279,20 @@ public class OrbitalSimulation extends JFrame {
             currentBody = bodyName;
             double[] data = CELESTIAL_BODIES.get(bodyName);
             
-            // Update physical constants
             earthRadius = data[0];
             earthMass = data[1];
             gravitationalConstant = data[2];
             
-            // Set semi-major axis to 1.2 times the radius of the new body
             semiMajorAxis = earthRadius * 1.2;
             
-            // Load new image
             loadCelestialBodyImage();
-            
-            // Recreate satellite with new parameters
             createSatellite();
             
-            // Clear trail if auto-clear is enabled
             if (autoClearOnUpdate) {
                 simulationPanel.clearTrail();
             }
             
-            // Update window title
             setTitle("Orbital Mechanics Simulation - " + bodyName);
-            
-            // Refresh display
             simulationPanel.repaint();
         }
     }
@@ -303,12 +302,11 @@ public class OrbitalSimulation extends JFrame {
      */
     private void loadCelestialBodyImage() {
         try {
-            String imagePath = "src/resources/" + currentBody + ".png"; // UPDATED PATH
+            String imagePath = "src/resources/" + currentBody + ".png";
             File imageFile = new File(imagePath);
             if (imageFile.exists()) {
                 celestialBodyImage = ImageIO.read(imageFile);
             } else {
-                // If image doesn't exist, create a simple colored circle
                 celestialBodyImage = null;
                 System.out.println("Image not found: " + imagePath + " - using colored circle instead");
             }
@@ -354,24 +352,18 @@ public class OrbitalSimulation extends JFrame {
             satelliteSize = 4;
             animationDelay = 50;
             
-            // Reset animation
             timeMultiplier = 1.0;
             useEquinoctialElements = false;
             autoClearOnZoom = true;
             autoClearOnUpdate = true;
             
-            // Reset lunar and solar effects
             lunarEffectsEnabled = false;
             solarEffectsEnabled = false;
             currentSimulationTime = 0;
             
-            // Reset to Earth
             setCelestialBody("Earth");
-            
-            // Reset satellite type
             setSatelliteType("Default");
             
-            // Update simulation
             createSatellite();
             simulationPanel.updateSettings();
             simulationPanel.clearTrail();
@@ -428,12 +420,14 @@ public class OrbitalSimulation extends JFrame {
     public SimulationPanel getSimulationPanel() { return simulationPanel; }
     public double getCurrentSimulationTime() { return currentSimulationTime; }
     
-    // Lunar and Solar Effects Getters
+    // Lunar and Solar Effects Getters - UPDATED to use currentSimulationTime
     public boolean isLunarEffectsEnabled() { return lunarEffectsEnabled; }
     public boolean isSolarEffectsEnabled() { return solarEffectsEnabled; }
+    
     public double[] getMoonPosition() {
         if (!lunarEffectsEnabled) return new double[]{0, 0};
         
+        // Calculate Moon angle based on current simulation time
         double moonAngle = Math.toRadians(INITIAL_MOON_ANGLE + (currentSimulationTime / LUNAR_ORBITAL_PERIOD) * 360.0);
         double moonX = MOON_EARTH_DISTANCE * Math.cos(moonAngle);
         double moonY = MOON_EARTH_DISTANCE * Math.sin(moonAngle);
@@ -443,6 +437,7 @@ public class OrbitalSimulation extends JFrame {
     public double[] getSunPosition() {
         if (!solarEffectsEnabled) return new double[]{0, 0};
         
+        // Calculate Sun angle based on current simulation time
         double sunAngle = Math.toRadians(INITIAL_SUN_ANGLE + (currentSimulationTime / SOLAR_ORBITAL_PERIOD) * 360.0);
         double sunX = SUN_EARTH_DISTANCE * Math.cos(sunAngle);
         double sunY = SUN_EARTH_DISTANCE * Math.sin(sunAngle);
@@ -474,28 +469,22 @@ public class OrbitalSimulation extends JFrame {
     public void setLunarEffectsEnabled(boolean lunarEffectsEnabled) { this.lunarEffectsEnabled = lunarEffectsEnabled; }
     public void setSolarEffectsEnabled(boolean solarEffectsEnabled) { this.solarEffectsEnabled = solarEffectsEnabled; }
     
-    // [Rest of the file continues with createControlPanel, startAnimation, etc...]
-    // [The control panel creation and animation logic remain exactly the same]
-    
     /**
      * Creates the control panel with orbital parameters, time controls, and zoom controls
-     * Uses GridBagLayout for precise component positioning
+     * Enhanced with date/time button
      */
     private JPanel createControlPanel() {
-        // Initialize panel with grid bag layout for flexible component arrangement
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setPreferredSize(new Dimension(WINDOW_WIDTH, CONTROL_PANEL_HEIGHT));
         panel.setBorder(BorderFactory.createTitledBorder("Orbital Parameters & Controls"));
         
-        // Grid bag constraints for component positioning and sizing
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 8, 5, 8); // Padding around components
-        gbc.fill = GridBagConstraints.HORIZONTAL; // Allow horizontal stretching
+        gbc.insets = new Insets(5, 8, 5, 8);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         
-        // ROW 1: Primary orbital parameters (semi-major axis, eccentricity, inclination)
-        gbc.gridy = 0; // First row
+        // ROW 1: Primary orbital parameters
+        gbc.gridy = 0;
         
-        // Semi-major axis input (defines orbit size)
         gbc.gridx = 0;
         panel.add(new JLabel("Semi-major axis (km):"), gbc);
         gbc.gridx = 1;
@@ -503,7 +492,6 @@ public class OrbitalSimulation extends JFrame {
         smaField.setPreferredSize(new Dimension(100, 25));
         panel.add(smaField, gbc);
         
-        // Eccentricity input (defines orbit shape: 0=circle, approaching 1=elongated ellipse)
         gbc.gridx = 2;
         panel.add(new JLabel("Eccentricity:"), gbc);
         gbc.gridx = 3;
@@ -511,7 +499,6 @@ public class OrbitalSimulation extends JFrame {
         eccField.setPreferredSize(new Dimension(100, 25));
         panel.add(eccField, gbc);
         
-        // Inclination input (orbit plane angle relative to Earth's equator)
         gbc.gridx = 4;
         panel.add(new JLabel("Inclination (°):"), gbc);
         gbc.gridx = 5;
@@ -520,9 +507,8 @@ public class OrbitalSimulation extends JFrame {
         panel.add(incField, gbc);
         
         // ROW 2: Secondary orbital parameters and control buttons
-        gbc.gridy = 1; // Second row
+        gbc.gridy = 1;
         
-        // Argument of periapsis (orientation of ellipse within the orbital plane)
         gbc.gridx = 0;
         panel.add(new JLabel("Arg. Periapsis (°):"), gbc);
         gbc.gridx = 1;
@@ -530,7 +516,6 @@ public class OrbitalSimulation extends JFrame {
         argPeriField.setPreferredSize(new Dimension(100, 25));
         panel.add(argPeriField, gbc);
         
-        // Longitude of ascending node (rotation of the orbital plane in space)
         gbc.gridx = 2;
         panel.add(new JLabel("Long. Asc. Node (°):"), gbc);
         gbc.gridx = 3;
@@ -538,61 +523,61 @@ public class OrbitalSimulation extends JFrame {
         lanField.setPreferredSize(new Dimension(100, 25));
         panel.add(lanField, gbc);
         
-        // Button to apply orbital parameter changes
         gbc.gridx = 4;
         JButton updateButton = new JButton("Update Orbit");
         updateButton.setPreferredSize(new Dimension(120, 30));
         panel.add(updateButton, gbc);
         
-        // Button to switch between classical and equinoctial element representations
         gbc.gridx = 5;
         JButton toggleElementsButton = new JButton("Switch to Equinoctial");
         toggleElementsButton.setPreferredSize(new Dimension(150, 30));
         panel.add(toggleElementsButton, gbc);
         
-        // === NEW: ROW 2.5: Date/Time Display ===
-        gbc.gridy = 2; // New row for date/time
+        // ROW 2.5: Date/Time Display and Button
+        gbc.gridy = 2;
         gbc.gridx = 0;
         panel.add(new JLabel("Simulation Date/Time:"), gbc);
         gbc.gridx = 1;
-        gbc.gridwidth = 3; // Span multiple columns
+        gbc.gridwidth = 2;
         dateTimeLabel = new JLabel("Jan 1, 1970 00:00:00 UTC");
         dateTimeLabel.setFont(new Font("Monospaced", Font.BOLD, 12));
-        dateTimeLabel.setForeground(new Color(0, 150, 0)); // Green color
+        dateTimeLabel.setForeground(new Color(0, 150, 0));
         panel.add(dateTimeLabel, gbc);
-        gbc.gridwidth = 1; // Reset to single column
+        gbc.gridwidth = 1;
         
-        // ROW 3: Time control system for animation speed
-        gbc.gridy = 3; // Third row
+        // NEW: Date/Time button
+        gbc.gridx = 3;
+        JButton setTimeButton = new JButton("Set Time...");
+        setTimeButton.setPreferredSize(new Dimension(100, 30));
+        setTimeButton.addActionListener(e -> dialogManager.showDateTimeDialog());
+        panel.add(setTimeButton, gbc);
         
-        // Time speed control label
+        // ROW 3: Time control system
+        gbc.gridy = 3;
+        
         gbc.gridx = 0;
         panel.add(new JLabel("Time Speed:"), gbc);
         
-        // Logarithmic slider for time speed (powers of 10 from 0.001x to 100000x)
         gbc.gridx = 1;
-        gbc.gridwidth = 2; // Span two columns
-        JSlider speedSlider = new JSlider(-3, 5, 0); // -3 = 0.001x, 5 = 100000x
+        gbc.gridwidth = 2;
+        JSlider speedSlider = new JSlider(-3, 5, 0);
         speedSlider.setMajorTickSpacing(1);
         speedSlider.setPaintTicks(true);
         speedSlider.setPaintLabels(true);
         speedSlider.setPreferredSize(new Dimension(200, 40));
         panel.add(speedSlider, gbc);
         
-        // Custom time speed input field for precise control
-        gbc.gridwidth = 1; // Reset to single column
+        gbc.gridwidth = 1;
         gbc.gridx = 3;
         JTextField customSpeedField = new JTextField("1", 8);
         customSpeedField.setPreferredSize(new Dimension(80, 25));
         panel.add(customSpeedField, gbc);
         
-        // Button to apply custom time speed
         gbc.gridx = 4;
         JButton setSpeedButton = new JButton("Set");
         setSpeedButton.setPreferredSize(new Dimension(50, 25));
         panel.add(setSpeedButton, gbc);
         
-        // Animation control buttons (pause/resume, reset position)
         gbc.gridx = 5;
         JButton pauseButton = new JButton("Pause");
         pauseButton.setPreferredSize(new Dimension(80, 30));
@@ -608,44 +593,38 @@ public class OrbitalSimulation extends JFrame {
         clearTrailButton.setPreferredSize(new Dimension(90, 30));
         panel.add(clearTrailButton, gbc);
 
-        // Display current time speed multiplier
         gbc.gridx = 8;
         JLabel speedLabel = new JLabel("1x");
         speedLabel.setPreferredSize(new Dimension(40, 25));
         panel.add(speedLabel, gbc);
         
-        // ROW 4: Zoom control system for visual scaling
-        gbc.gridy = 4; // Fourth row
+        // ROW 4: Zoom control system
+        gbc.gridy = 4;
         
-        // Zoom control label
         gbc.gridx = 0;
         panel.add(new JLabel("Zoom:"), gbc);
         
-        // Zoom in button (increases visual scale by factor of 1.5)
         gbc.gridx = 1;
         JButton zoomInButton = new JButton("Zoom In (+)");
         zoomInButton.setPreferredSize(new Dimension(100, 25));
         panel.add(zoomInButton, gbc);
         
-        // Zoom out button (decreases visual scale by factor of 1.5)
         gbc.gridx = 2;
         JButton zoomOutButton = new JButton("Zoom Out (-)");
         zoomOutButton.setPreferredSize(new Dimension(100, 25));
         panel.add(zoomOutButton, gbc);
         
-        // Reset zoom to default 1.0x scale
         gbc.gridx = 3;
         JButton resetZoomButton = new JButton("Reset Zoom");
         resetZoomButton.setPreferredSize(new Dimension(100, 25));
         panel.add(resetZoomButton, gbc);
         
-        // Display current zoom level
         gbc.gridx = 4;
         JLabel zoomLabel = new JLabel("1.0x");
         zoomLabel.setPreferredSize(new Dimension(50, 25));
         panel.add(zoomLabel, gbc);
         
-        // EVENT LISTENERS: Define behavior for user interactions
+        // EVENT LISTENERS
         
         // Update Orbit Button
         updateButton.addActionListener(e -> {
@@ -735,6 +714,7 @@ public class OrbitalSimulation extends JFrame {
             currentSimulationTime = 0;
             createSatellite();
             simulationPanel.clearTrail();
+            updateDateTimeDisplay();
             simulationPanel.repaint();
         });
         
@@ -766,15 +746,6 @@ public class OrbitalSimulation extends JFrame {
         });
         
         return panel;
-    }
-    
-    /**
-     * Updates the date/time label with current simulation time
-     */
-    private void updateDateTimeDisplay() {
-        LocalDateTime dateTime = LocalDateTime.of(1970, 1, 1, 0, 0, 0).plusSeconds((long)currentSimulationTime);
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm:ss");
-        dateTimeLabel.setText(formatter.format(dateTime) + " UTC");
     }
     
     /**
@@ -894,6 +865,7 @@ public class OrbitalSimulation extends JFrame {
     
     /**
      * Starts the animation timer for smooth orbital motion display
+     * UPDATED: Now updates currentSimulationTime continuously
      */
     private void startAnimation() {
         animationTimer = new Timer(animationDelay, e -> {

@@ -1,18 +1,334 @@
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import javax.swing.*;
 
 /**
  * OrbitalDialogManager handles all dialog windows for the orbital simulation
- * Extracted from OrbitalSimulation for better code organization and maintainability
+ * Enhanced with Date/Time picker dialog for adjusting simulation time
+ * Restructured date/time dialog for better text area visibility
  */
 public class OrbitalDialogManager {
     private OrbitalSimulation simulation;
     
     public OrbitalDialogManager(OrbitalSimulation simulation) {
         this.simulation = simulation;
+    }
+    
+    /**
+     * Shows the Date/Time picker dialog for adjusting simulation time
+     * Only allows changes when simulation is paused
+     * RESTRUCTURED: Better layout with prominent text area
+     */
+    public void showDateTimeDialog() {
+        // Check if simulation is paused
+        if (!simulation.isPaused()) {
+            JOptionPane.showMessageDialog(simulation, 
+                "Simulation must be paused to change date/time.\nPress 'Pause' button first.", 
+                "Simulation Running", 
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        JDialog dialog = new JDialog(simulation, "Set Simulation Date/Time", true);
+        dialog.setSize(700, 550);
+        dialog.setLocationRelativeTo(simulation);
+        
+        // Use BorderLayout for better space distribution
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Convert current simulation time to date/time
+        LocalDateTime currentDateTime = LocalDateTime.of(1970, 1, 1, 0, 0, 0)
+            .plusSeconds((long)simulation.getCurrentSimulationTime());
+        
+        // TOP PANEL: Date/Time inputs
+        JPanel inputPanel = new JPanel(new GridBagLayout());
+        inputPanel.setBorder(BorderFactory.createTitledBorder("Set Date & Time"));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        // Year input
+        gbc.gridy = 0; gbc.gridx = 0;
+        inputPanel.add(new JLabel("Year:"), gbc);
+        gbc.gridx = 1;
+        JSpinner yearSpinner = new JSpinner(new SpinnerNumberModel(currentDateTime.getYear(), 1970, 2100, 1));
+        yearSpinner.setPreferredSize(new Dimension(80, 25));
+        inputPanel.add(yearSpinner, gbc);
+        
+        // Month input
+        gbc.gridx = 2;
+        inputPanel.add(new JLabel("Month:"), gbc);
+        gbc.gridx = 3;
+        String[] months = {"January", "February", "March", "April", "May", "June",
+                          "July", "August", "September", "October", "November", "December"};
+        JComboBox<String> monthCombo = new JComboBox<>(months);
+        monthCombo.setSelectedIndex(currentDateTime.getMonthValue() - 1);
+        monthCombo.setPreferredSize(new Dimension(120, 25));
+        inputPanel.add(monthCombo, gbc);
+        
+        // Day input
+        gbc.gridx = 4;
+        inputPanel.add(new JLabel("Day:"), gbc);
+        gbc.gridx = 5;
+        JSpinner daySpinner = new JSpinner(new SpinnerNumberModel(currentDateTime.getDayOfMonth(), 1, 31, 1));
+        daySpinner.setPreferredSize(new Dimension(60, 25));
+        inputPanel.add(daySpinner, gbc);
+        
+        // Second row for time
+        gbc.gridy = 1; gbc.gridx = 0;
+        inputPanel.add(new JLabel("Hour:"), gbc);
+        gbc.gridx = 1;
+        JSpinner hourSpinner = new JSpinner(new SpinnerNumberModel(currentDateTime.getHour(), 0, 23, 1));
+        hourSpinner.setPreferredSize(new Dimension(60, 25));
+        inputPanel.add(hourSpinner, gbc);
+        
+        gbc.gridx = 2;
+        inputPanel.add(new JLabel("Minute:"), gbc);
+        gbc.gridx = 3;
+        JSpinner minuteSpinner = new JSpinner(new SpinnerNumberModel(currentDateTime.getMinute(), 0, 59, 1));
+        minuteSpinner.setPreferredSize(new Dimension(60, 25));
+        inputPanel.add(minuteSpinner, gbc);
+        
+        gbc.gridx = 4;
+        inputPanel.add(new JLabel("Second:"), gbc);
+        gbc.gridx = 5;
+        JSpinner secondSpinner = new JSpinner(new SpinnerNumberModel(currentDateTime.getSecond(), 0, 59, 1));
+        secondSpinner.setPreferredSize(new Dimension(60, 25));
+        inputPanel.add(secondSpinner, gbc);
+        
+        // RIGHT PANEL: Preset buttons
+        JPanel presetPanel = new JPanel(new GridLayout(6, 1, 5, 5));
+        presetPanel.setBorder(BorderFactory.createTitledBorder("Quick Presets"));
+        presetPanel.setPreferredSize(new Dimension(140, 200));
+        
+        JButton epochButton = new JButton("Unix Epoch");
+        JButton nowButton = new JButton("Current Time");
+        JButton y2kButton = new JButton("Y2K (2000)");
+        JButton apolloButton = new JButton("Apollo 11");
+        JButton futureButton = new JButton("Future (2030)");
+        JButton spacerButton = new JButton(""); // Empty spacer
+        spacerButton.setEnabled(false);
+        spacerButton.setVisible(false);
+        
+        presetPanel.add(epochButton);
+        presetPanel.add(nowButton);
+        presetPanel.add(y2kButton);
+        presetPanel.add(apolloButton);
+        presetPanel.add(futureButton);
+        presetPanel.add(spacerButton);
+        
+        // CENTER PANEL: Information area (gets most space)
+        JTextArea infoArea = new JTextArea(15, 55);
+        infoArea.setEditable(false);
+        infoArea.setFont(new Font("Monospaced", Font.PLAIN, 11));
+        infoArea.setBackground(new Color(248, 248, 248));
+        infoArea.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        
+        JScrollPane infoScroll = new JScrollPane(infoArea);
+        infoScroll.setBorder(BorderFactory.createTitledBorder("Date/Time Information & Celestial Positions"));
+        infoScroll.setPreferredSize(new Dimension(500, 250));
+        infoScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        infoScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        
+        // Update info when date/time changes
+        ActionListener updateInfo = e -> {
+            try {
+                int year = (Integer) yearSpinner.getValue();
+                int month = monthCombo.getSelectedIndex() + 1;
+                int day = (Integer) daySpinner.getValue();
+                int hour = (Integer) hourSpinner.getValue();
+                int minute = (Integer) minuteSpinner.getValue();
+                int second = (Integer) secondSpinner.getValue();
+                
+                LocalDateTime newDateTime = LocalDateTime.of(year, month, day, hour, minute, second);
+                long newSimulationTime = newDateTime.toEpochSecond(ZoneOffset.UTC);
+                
+                // Calculate Moon and Sun positions for this time
+                double moonAngle = (84.7 + (newSimulationTime / (29.530 * 24 * 3600)) * 360.0) % 360.0;
+                if (moonAngle < 0) moonAngle += 360.0;
+                
+                double sunAngle = (281.0 + (newSimulationTime / (365.25 * 24 * 3600)) * 360.0) % 360.0;
+                if (sunAngle < 0) sunAngle += 360.0;
+                
+                StringBuilder info = new StringBuilder();
+                info.append("SELECTED DATE & TIME:\n");
+                info.append("=====================================\n");
+                info.append(newDateTime.format(DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy")) + "\n");
+                info.append(newDateTime.format(DateTimeFormatter.ofPattern("HH:mm:ss")) + " UTC\n");
+                info.append("Unix Timestamp: ").append(newSimulationTime).append(" seconds\n\n");
+                
+                info.append("CELESTIAL BODY POSITIONS:\n");
+                info.append("=====================================\n");
+                info.append(String.format("Moon Position: %.1f° east of reference\n", moonAngle));
+                info.append(String.format("Sun Position:  %.1f° from reference\n", sunAngle));
+                info.append("\n");
+                
+                // Add some context about the date
+                if (year == 1969 && month == 7 && day == 20) {
+                    info.append("HISTORICAL SIGNIFICANCE:\n");
+                    info.append("=====================================\n");
+                    info.append("Apollo 11 Moon Landing!\n");
+                    info.append("Neil Armstrong and Buzz Aldrin landed on\n");
+                    info.append("the Moon at 20:17:40 UTC on this date.\n\n");
+                } else if (year == 2000 && month == 1 && day == 1) {
+                    info.append("HISTORICAL SIGNIFICANCE:\n");
+                    info.append("=====================================\n");
+                    info.append("Y2K - Millennium celebration!\n");
+                    info.append("The start of the 21st century.\n\n");
+                } else if (year == 1970 && month == 1 && day == 1) {
+                    info.append("HISTORICAL SIGNIFICANCE:\n");
+                    info.append("=====================================\n");
+                    info.append("Unix Epoch - Beginning of computer time!\n");
+                    info.append("Reference point for all Unix timestamps.\n\n");
+                }
+                
+                info.append("SIMULATION EFFECTS:\n");
+                info.append("=====================================\n");
+                if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled()) {
+                    info.append("• Celestial bodies will move to new positions\n");
+                    info.append("• Gravitational effects will be recalculated\n");
+                    info.append("• Satellite orbital elements remain unchanged\n");
+                    info.append("• Only time reference point changes\n");
+                } else {
+                    info.append("• Lunar/Solar effects are currently disabled\n");
+                    info.append("• Enable them in Non-Keplerian Effects menu\n");
+                    info.append("• Only simulation time display will change\n");
+                }
+                
+                infoArea.setText(info.toString());
+                infoArea.setCaretPosition(0); // Scroll to top
+            } catch (Exception ex) {
+                infoArea.setText("ERROR: Invalid date/time selection.\n\nPlease check your inputs:\n" +
+                               "• Year: 1970-2100\n" +
+                               "• Month: Valid month\n" +
+                               "• Day: Valid for selected month\n" +
+                               "• Time: 24-hour format\n\n" +
+                               "Error details: " + ex.getMessage());
+            }
+        };
+        
+        // Add listeners to all components
+        yearSpinner.addChangeListener(e -> updateInfo.actionPerformed(null));
+        monthCombo.addActionListener(updateInfo);
+        daySpinner.addChangeListener(e -> updateInfo.actionPerformed(null));
+        hourSpinner.addChangeListener(e -> updateInfo.actionPerformed(null));
+        minuteSpinner.addChangeListener(e -> updateInfo.actionPerformed(null));
+        secondSpinner.addChangeListener(e -> updateInfo.actionPerformed(null));
+        
+        // Preset button actions
+        epochButton.addActionListener(e -> {
+            yearSpinner.setValue(1970);
+            monthCombo.setSelectedIndex(0);
+            daySpinner.setValue(1);
+            hourSpinner.setValue(0);
+            minuteSpinner.setValue(0);
+            secondSpinner.setValue(0);
+            updateInfo.actionPerformed(null);
+        });
+        
+        nowButton.addActionListener(e -> {
+            LocalDateTime now = LocalDateTime.now();
+            yearSpinner.setValue(now.getYear());
+            monthCombo.setSelectedIndex(now.getMonthValue() - 1);
+            daySpinner.setValue(now.getDayOfMonth());
+            hourSpinner.setValue(now.getHour());
+            minuteSpinner.setValue(now.getMinute());
+            secondSpinner.setValue(now.getSecond());
+            updateInfo.actionPerformed(null);
+        });
+        
+        y2kButton.addActionListener(e -> {
+            yearSpinner.setValue(2000);
+            monthCombo.setSelectedIndex(0);
+            daySpinner.setValue(1);
+            hourSpinner.setValue(0);
+            minuteSpinner.setValue(0);
+            secondSpinner.setValue(0);
+            updateInfo.actionPerformed(null);
+        });
+        
+        apolloButton.addActionListener(e -> {
+            yearSpinner.setValue(1969);
+            monthCombo.setSelectedIndex(6); // July
+            daySpinner.setValue(20);
+            hourSpinner.setValue(20);
+            minuteSpinner.setValue(17);
+            secondSpinner.setValue(40);
+            updateInfo.actionPerformed(null);
+        });
+        
+        futureButton.addActionListener(e -> {
+            yearSpinner.setValue(2030);
+            monthCombo.setSelectedIndex(0);
+            daySpinner.setValue(1);
+            hourSpinner.setValue(12);
+            minuteSpinner.setValue(0);
+            secondSpinner.setValue(0);
+            updateInfo.actionPerformed(null);
+        });
+        
+        // Initial info update
+        updateInfo.actionPerformed(null);
+        
+        // BOTTOM PANEL: Buttons
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton okButton = new JButton("Set Time");
+        JButton cancelButton = new JButton("Cancel");
+        
+        okButton.setPreferredSize(new Dimension(100, 30));
+        cancelButton.setPreferredSize(new Dimension(100, 30));
+        
+        okButton.addActionListener(e -> {
+            try {
+                int year = (Integer) yearSpinner.getValue();
+                int month = monthCombo.getSelectedIndex() + 1;
+                int day = (Integer) daySpinner.getValue();
+                int hour = (Integer) hourSpinner.getValue();
+                int minute = (Integer) minuteSpinner.getValue();
+                int second = (Integer) secondSpinner.getValue();
+                
+                LocalDateTime newDateTime = LocalDateTime.of(year, month, day, hour, minute, second);
+                long newSimulationTime = newDateTime.toEpochSecond(ZoneOffset.UTC);
+                
+                simulation.setCurrentSimulationTime(newSimulationTime);
+                simulation.updateDateTimeDisplay();
+                simulation.getSimulationPanel().repaint();
+                
+                dialog.dispose();
+                
+                JOptionPane.showMessageDialog(simulation, 
+                    "Simulation time updated to:\n" + 
+                    newDateTime.format(DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm:ss")) + " UTC\n\n" +
+                    "Celestial bodies have moved to their positions for this date/time.", 
+                    "Time Updated", 
+                    JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, 
+                    "Invalid date/time values!\n\n" + ex.getMessage(), 
+                    "Error", 
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        
+        // Assemble the main layout
+        mainPanel.add(inputPanel, BorderLayout.NORTH);
+        mainPanel.add(presetPanel, BorderLayout.EAST);
+        mainPanel.add(infoScroll, BorderLayout.CENTER);  // Gets most space
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        dialog.add(mainPanel);
+        dialog.setVisible(true);
     }
     
     /**
@@ -306,7 +622,6 @@ public class OrbitalDialogManager {
                 "Add Custom Satellite", 
                 JOptionPane.PLAIN_MESSAGE);
             if (customName != null && !customName.trim().isEmpty()) {
-                // Add to the list temporarily (for this session only)
                 String[] newTypes = new String[satelliteTypes.length + 1];
                 System.arraycopy(satelliteTypes, 0, newTypes, 0, satelliteTypes.length);
                 newTypes[satelliteTypes.length] = customName.trim();
@@ -335,9 +650,8 @@ public class OrbitalDialogManager {
         
         JPanel panel = new JPanel(new BorderLayout());
         
-        // Create list of celestial bodies
         String[] bodies = simulation.getCelestialBodies().keySet().toArray(new String[0]);
-        Arrays.sort(bodies); // Sort alphabetically
+        Arrays.sort(bodies);
         JList<String> bodyList = new JList<>(bodies);
         bodyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         bodyList.setSelectedValue(simulation.getCurrentBody(), true);
@@ -345,14 +659,12 @@ public class OrbitalDialogManager {
         JScrollPane scrollPane = new JScrollPane(bodyList);
         panel.add(scrollPane, BorderLayout.CENTER);
         
-        // Info panel to show body details
         JTextArea infoArea = new JTextArea(6, 30);
         infoArea.setEditable(false);
         infoArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
         JScrollPane infoScroll = new JScrollPane(infoArea);
         panel.add(infoScroll, BorderLayout.SOUTH);
         
-        // Update info when selection changes
         bodyList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 String selected = bodyList.getSelectedValue();
@@ -374,13 +686,11 @@ public class OrbitalDialogManager {
             }
         });
         
-        // Trigger initial info display
         if (bodyList.getSelectedValue() != null) {
             bodyList.getListSelectionListeners()[0].valueChanged(
                 new javax.swing.event.ListSelectionEvent(bodyList, 0, 0, false));
         }
         
-        // Buttons
         JPanel buttonPanel = new JPanel();
         JButton okButton = new JButton("OK");
         JButton cancelButton = new JButton("Cancel");
@@ -416,7 +726,6 @@ public class OrbitalDialogManager {
         gbc.insets = new Insets(10, 10, 10, 10);
         gbc.anchor = GridBagConstraints.WEST;
         
-        // Auto-clear trail options
         JCheckBox autoClearZoomBox = new JCheckBox("Auto-clear trail when zooming", simulation.getAutoClearOnZoom());
         JCheckBox autoClearUpdateBox = new JCheckBox("Auto-clear trail when updating orbit", simulation.getAutoClearOnUpdate());
         
@@ -428,7 +737,6 @@ public class OrbitalDialogManager {
         gbc.gridy = 1;
         panel.add(autoClearUpdateBox, gbc);
         
-        // Buttons
         JPanel buttonPanel = new JPanel();
         JButton okButton = new JButton("OK");
         JButton cancelButton = new JButton("Cancel");
@@ -467,12 +775,10 @@ public class OrbitalDialogManager {
         gbc.insets = new Insets(5, 5, 5, 5);
         gbc.anchor = GridBagConstraints.WEST;
         
-        // Create input fields for physical constants
         JTextField earthRadiusField = new JTextField(String.valueOf(simulation.getEarthRadius() / 1000), 10);
         JTextField earthMassField = new JTextField(String.format("%.3e", simulation.getEarthMass()), 10);
         JTextField gravConstField = new JTextField(String.format("%.5e", simulation.getGravitationalConstant()), 10);
         
-        // Add components to dialog
         gbc.gridy = 0;
         gbc.gridx = 0; panel.add(new JLabel("Earth Radius (km):"), gbc);
         gbc.gridx = 1; panel.add(earthRadiusField, gbc);
@@ -485,13 +791,11 @@ public class OrbitalDialogManager {
         gbc.gridx = 0; panel.add(new JLabel("Gravitational Constant:"), gbc);
         gbc.gridx = 1; panel.add(gravConstField, gbc);
         
-        // Add explanation labels
         gbc.gridy = 3;
         gbc.gridx = 0;
         gbc.gridwidth = 2;
         panel.add(new JLabel("Note: Changing these values affects orbital calculations"), gbc);
         
-        // Buttons
         JPanel buttonPanel = new JPanel();
         JButton okButton = new JButton("OK");
         JButton cancelButton = new JButton("Cancel");
@@ -566,204 +870,38 @@ public class OrbitalDialogManager {
         
         tabbedPane.add("Trail", trailPanel);
         
-        // Colors Tab
-        JPanel colorsPanel = createColorsPanel(dialog);
-        tabbedPane.add("Colors", colorsPanel);
-        
-        // Scale & Size Tab
-        JPanel scalePanel = createScalePanel();
-        tabbedPane.add("Scale & Size", scalePanel);
-        
-        // Buttons
         JPanel buttonPanel = new JPanel();
         JButton okButton = new JButton("OK");
         JButton cancelButton = new JButton("Cancel");
-        JButton applyButton = new JButton("Apply");
         
         okButton.addActionListener(e -> {
-            applyDisplaySettings(trailLengthField, trailOpacitySlider, trailWidthField, scalePanel);
-            dialog.dispose();
+            try {
+                simulation.setMaxTrailLength(Integer.parseInt(trailLengthField.getText()));
+                Color currentTrail = simulation.getTrailColor();
+                simulation.setTrailColor(new Color(currentTrail.getRed(), currentTrail.getGreen(), 
+                                     currentTrail.getBlue(), trailOpacitySlider.getValue()));
+                float newWidth = Float.parseFloat(trailWidthField.getText());
+                if (newWidth < 0.1f) newWidth = 0.1f;
+                if (newWidth > 20.0f) newWidth = 20.0f;
+                simulation.setTrailWidth(newWidth);
+                
+                simulation.getSimulationPanel().updateSettings();
+                simulation.getSimulationPanel().repaint();
+                dialog.dispose();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Invalid input values!");
+            }
         });
         
         cancelButton.addActionListener(e -> dialog.dispose());
         
-        applyButton.addActionListener(e -> {
-            applyDisplaySettings(trailLengthField, trailOpacitySlider, trailWidthField, scalePanel);
-        });
-        
         buttonPanel.add(okButton);
         buttonPanel.add(cancelButton);
-        buttonPanel.add(applyButton);
         
         dialog.setLayout(new BorderLayout());
         dialog.add(tabbedPane, BorderLayout.CENTER);
         dialog.add(buttonPanel, BorderLayout.SOUTH);
         
         dialog.setVisible(true);
-    }
-    
-    /**
-     * Creates the colors panel for the display settings dialog
-     */
-    private JPanel createColorsPanel(JDialog dialog) {
-        JPanel colorsPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
-        gbc.anchor = GridBagConstraints.WEST;
-        
-        JButton earthColorButton = new JButton("     ");
-        earthColorButton.setBackground(simulation.getEarthColor());
-        earthColorButton.addActionListener(e -> {
-            Color newColor = JColorChooser.showDialog(dialog, "Choose Earth Color", simulation.getEarthColor());
-            if (newColor != null) {
-                simulation.setEarthColor(newColor);
-                earthColorButton.setBackground(newColor);
-            }
-        });
-        
-        JButton satelliteColorButton = new JButton("     ");
-        satelliteColorButton.setBackground(simulation.getSatelliteColor());
-        satelliteColorButton.addActionListener(e -> {
-            Color newColor = JColorChooser.showDialog(dialog, "Choose Satellite Color", simulation.getSatelliteColor());
-            if (newColor != null) {
-                simulation.setSatelliteColor(newColor);
-                satelliteColorButton.setBackground(newColor);
-            }
-        });
-        
-        JButton trailColorButton = new JButton("     ");
-        trailColorButton.setBackground(new Color(simulation.getTrailColor().getRed(), simulation.getTrailColor().getGreen(), simulation.getTrailColor().getBlue()));
-        trailColorButton.addActionListener(e -> {
-            Color newColor = JColorChooser.showDialog(dialog, "Choose Trail Color", 
-                new Color(simulation.getTrailColor().getRed(), simulation.getTrailColor().getGreen(), simulation.getTrailColor().getBlue()));
-            if (newColor != null) {
-                simulation.setTrailColor(new Color(newColor.getRed(), newColor.getGreen(), newColor.getBlue(), simulation.getTrailColor().getAlpha()));
-                trailColorButton.setBackground(newColor);
-            }
-        });
-        
-        JButton moonColorButton = new JButton("     ");
-        moonColorButton.setBackground(simulation.getMoonColor());
-        moonColorButton.addActionListener(e -> {
-            Color newColor = JColorChooser.showDialog(dialog, "Choose Moon Color", simulation.getMoonColor());
-            if (newColor != null) {
-                simulation.setMoonColor(newColor);
-                moonColorButton.setBackground(newColor);
-            }
-        });
-        
-        JButton sunColorButton = new JButton("     ");
-        sunColorButton.setBackground(simulation.getSunColor());
-        sunColorButton.addActionListener(e -> {
-            Color newColor = JColorChooser.showDialog(dialog, "Choose Sun Color", simulation.getSunColor());
-            if (newColor != null) {
-                simulation.setSunColor(newColor);
-                sunColorButton.setBackground(newColor);
-            }
-        });
-        
-        gbc.gridy = 0;
-        gbc.gridx = 0; colorsPanel.add(new JLabel("Earth Color:"), gbc);
-        gbc.gridx = 1; colorsPanel.add(earthColorButton, gbc);
-        
-        gbc.gridy = 1;
-        gbc.gridx = 0; colorsPanel.add(new JLabel("Satellite Color:"), gbc);
-        gbc.gridx = 1; colorsPanel.add(satelliteColorButton, gbc);
-        
-        gbc.gridy = 2;
-        gbc.gridx = 0; colorsPanel.add(new JLabel("Trail Color:"), gbc);
-        gbc.gridx = 1; colorsPanel.add(trailColorButton, gbc);
-        
-        gbc.gridy = 3;
-        gbc.gridx = 0; colorsPanel.add(new JLabel("Moon Color:"), gbc);
-        gbc.gridx = 1; colorsPanel.add(moonColorButton, gbc);
-        
-        gbc.gridy = 4;
-        gbc.gridx = 0; colorsPanel.add(new JLabel("Sun Color:"), gbc);
-        gbc.gridx = 1; colorsPanel.add(sunColorButton, gbc);
-        
-        return colorsPanel;
-    }
-    
-    /**
-     * Creates the scale panel for the display settings dialog
-     */
-    private JPanel createScalePanel() {
-        JPanel scalePanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
-        gbc.anchor = GridBagConstraints.WEST;
-        
-        JTextField baseScaleField = new JTextField(String.format("%.2e", simulation.getBaseScale()), 10);
-        JTextField satSizeField = new JTextField(String.valueOf(simulation.getSatelliteSize()), 10);
-        JTextField animDelayField = new JTextField(String.valueOf(simulation.getAnimationDelay()), 10);
-        
-        gbc.gridy = 0;
-        gbc.gridx = 0; scalePanel.add(new JLabel("Base Scale Factor:"), gbc);
-        gbc.gridx = 1; scalePanel.add(baseScaleField, gbc);
-        
-        gbc.gridy = 1;
-        gbc.gridx = 0; scalePanel.add(new JLabel("Satellite Size (pixels):"), gbc);
-        gbc.gridx = 1; scalePanel.add(satSizeField, gbc);
-        
-        gbc.gridy = 2;
-        gbc.gridx = 0; scalePanel.add(new JLabel("Animation Delay (ms):"), gbc);
-        gbc.gridx = 1; scalePanel.add(animDelayField, gbc);
-        
-        return scalePanel;
-    }
-    
-    /**
-     * Applies display settings from the dialog
-     */
-    private void applyDisplaySettings(JTextField trailLengthField, JSlider trailOpacitySlider, 
-                                    JTextField trailWidthField, JPanel scalePanel) {
-        try {
-            // Apply trail settings
-            simulation.setMaxTrailLength(Integer.parseInt(trailLengthField.getText()));
-            Color currentTrail = simulation.getTrailColor();
-            simulation.setTrailColor(new Color(currentTrail.getRed(), currentTrail.getGreen(), 
-                                 currentTrail.getBlue(), trailOpacitySlider.getValue()));
-            float newWidth = Float.parseFloat(trailWidthField.getText());
-            
-            // Validate trail width
-            if (newWidth < 0.1f) newWidth = 0.1f;
-            if (newWidth > 20.0f) newWidth = 20.0f;
-            simulation.setTrailWidth(newWidth);
-            
-            // Apply scale settings from scalePanel
-            Component[] components = scalePanel.getComponents();
-            JTextField baseScaleField = null;
-            JTextField satSizeField = null;
-            JTextField animDelayField = null;
-            
-            for (Component comp : components) {
-                if (comp instanceof JTextField) {
-                    JTextField field = (JTextField) comp;
-                    if (baseScaleField == null) baseScaleField = field;
-                    else if (satSizeField == null) satSizeField = field;
-                    else if (animDelayField == null) animDelayField = field;
-                }
-            }
-            
-            if (baseScaleField != null) {
-                simulation.setBaseScale(Double.parseDouble(baseScaleField.getText()));
-            }
-            if (satSizeField != null) {
-                simulation.setSatelliteSize(Integer.parseInt(satSizeField.getText()));
-            }
-            if (animDelayField != null) {
-                int newDelay = Integer.parseInt(animDelayField.getText());
-                if (newDelay != simulation.getAnimationDelay()) {
-                    simulation.setAnimationDelay(newDelay);
-                    simulation.restartAnimation();
-                }
-            }
-            
-            simulation.getSimulationPanel().updateSettings();
-            simulation.getSimulationPanel().repaint();
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(null, "Invalid input values!");
-        }
     }
 }
