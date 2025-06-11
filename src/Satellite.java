@@ -2,6 +2,7 @@
  * Satellite class that handles orbital mechanics calculations
  * Implements Kepler's laws and coordinate transformations
  * Enhanced with lunar and solar gravitational perturbations using separate force calculators
+ * Modified to use OrbitTransforms class for coordinate transformations
  */
 public class Satellite {
     private double a, e, i, omega, Omega; // Orbital elements
@@ -182,8 +183,6 @@ public class Satellite {
         return angleDiff;
     }
     
-  
-    
     /**
      * === NEW: Getter methods for orbital elements (needed by force calculators) ===
      */
@@ -217,19 +216,6 @@ public class Satellite {
         e += delta;
     }
     
-    
-    /**
-     * === NEW: Calculates the strength of solar perturbations ===
-     * Solar effects are weaker than lunar but more significant for high-altitude satellites
-     * 
-     * @param satDistance Distance from Earth center to satellite
-     * @param satSunDistance Distance from satellite to Sun
-     * @return Solar perturbation strength factor
-     */
-  
-    
-   
-    
     /**
      * === NEW: Normalizes angle to [0, 2π] range ===
      */
@@ -240,47 +226,32 @@ public class Satellite {
     }
     
     /**
-     * Gets current satellite position in 2D coordinates
+     * Gets current satellite position in 2D coordinates (now using OrbitTransforms)
      */
     public double[] getPosition() {
-        double[] pos3D = getPosition3D();
-        return new double[]{pos3D[0], pos3D[1]}; // Return only X and Y
+        return OrbitTransforms.to2D(getPosition3D());
     }
     
     /**
-     * === NEW: Gets current satellite position in 3D coordinates ===
+     * === NEW: Gets current satellite position in 3D coordinates (now using OrbitTransforms) ===
      * This is needed for lunar perturbation calculations
      */
     public double[] getPosition3D() {
-        // Calculate position in orbital plane
-        double r = a * (1 - e * e) / (1 + e * Math.cos(nu)); // Orbital radius
-        double x_orbital = r * Math.cos(nu); // X in orbital plane
-        double y_orbital = r * Math.sin(nu); // Y in orbital plane
+        // Calculate orbital radius using OrbitTransforms
+        double r = OrbitTransforms.getOrbitalRadius(a, e, nu);
         
-        // Transform to Earth-centered coordinates using rotation matrices
-        // Apply argument of periapsis rotation
-        double x1 = x_orbital * Math.cos(omega) - y_orbital * Math.sin(omega);
-        double y1 = x_orbital * Math.sin(omega) + y_orbital * Math.cos(omega);
-        double z1 = 0; // Still in orbital plane
+        // Get orbital plane coordinates using OrbitTransforms
+        double[] orbitalCoords = OrbitTransforms.polarToOrbitalCartesian(r, nu);
         
-        // Apply inclination rotation
-        double x2 = x1;
-        double y2 = y1 * Math.cos(i) - z1 * Math.sin(i);
-        double z2 = y1 * Math.sin(i) + z1 * Math.cos(i);
-        
-        // Apply longitude of ascending node rotation
-        double x3 = x2 * Math.cos(Omega) - y2 * Math.sin(Omega);
-        double y3 = x2 * Math.sin(Omega) + y2 * Math.cos(Omega);
-        double z3 = z2;
-        
-        return new double[]{x3, y3, z3}; // Return 3D position
+        // Transform to Earth-centered coordinates using OrbitTransforms
+        return OrbitTransforms.orbitalToEarthCentered(orbitalCoords[0], orbitalCoords[1], omega, i, Omega);
     }
     
     /**
      * Gets current orbital velocity
      */
     public double getVelocity() {
-        double r = a * (1 - e * e) / (1 + e * Math.cos(nu));
+        double r = OrbitTransforms.getOrbitalRadius(a, e, nu);
         double mu = gravitationalConstant * earthMass;
         return Math.sqrt(mu * (2.0 / r - 1.0 / a)); // Vis-viva equation
     }

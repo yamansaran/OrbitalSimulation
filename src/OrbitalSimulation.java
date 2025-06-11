@@ -20,6 +20,8 @@ import java.time.format.DateTimeFormatter;
  * This program simulates satellite orbits around Earth using Kepler's laws and Newton's law of gravitation.
  * It supports both classical orbital elements (a, e, i, ω, Ω) and equinoctial elements (a, h, k, p, q).
  * Now includes lunar gravitational effects that can be toggled on/off.
+ * Modified to use extracted classes for trail management and coordinate transformations.
+ * Updated image paths to look in src/resources/ folder.
  * 
  * Mathematical Foundation:
  * - Uses Kepler's equation to solve orbital motion: M = E - e⋅sin(E)
@@ -101,7 +103,7 @@ public class OrbitalSimulation extends JFrame {
     private Color sunColor = new Color(255, 255, 0); // Sun color
     private JLabel dateTimeLabel; // Label to display current simulation date/time
     
-    // Available satellite types (can be expanded by adding PNG files to src folder)
+    // Available satellite types (can be expanded by adding PNG files to src/resources folder)
     private static final String[] SATELLITE_TYPES = {
         "Default",      // Uses colored dot
         "Satellite1",   // Uses Satellite1.png
@@ -517,7 +519,7 @@ public class OrbitalSimulation extends JFrame {
                                        "Description: Simple colored circle\n" +
                                        "File: None required");
                     } else {
-                        String imagePath = "src/" + selected + ".png";
+                        String imagePath = "src/resources/" + selected + ".png"; // UPDATED PATH
                         File imageFile = new File(imagePath);
                         boolean exists = imageFile.exists();
                         
@@ -598,7 +600,7 @@ public class OrbitalSimulation extends JFrame {
         }
         
         try {
-            String imagePath = "src/" + currentSatelliteType + ".png";
+            String imagePath = "src/resources/" + currentSatelliteType + ".png"; // UPDATED PATH
             File imageFile = new File(imagePath);
             if (imageFile.exists()) {
                 satelliteImage = ImageIO.read(imageFile);
@@ -614,7 +616,7 @@ public class OrbitalSimulation extends JFrame {
         }
     }
     
-      /**
+    /**
      * Shows the celestial body selection dialog
      */
     private void showCelestialBodyDialog() {
@@ -732,7 +734,7 @@ public class OrbitalSimulation extends JFrame {
      */
     private void loadCelestialBodyImage() {
         try {
-            String imagePath = "src/" + currentBody + ".png";
+            String imagePath = "src/resources/" + currentBody + ".png"; // UPDATED PATH
             File imageFile = new File(imagePath);
             if (imageFile.exists()) {
                 celestialBodyImage = ImageIO.read(imageFile);

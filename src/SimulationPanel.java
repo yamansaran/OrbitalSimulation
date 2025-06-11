@@ -12,6 +12,7 @@ import javax.imageio.ImageIO;
  * Custom JPanel for rendering the orbital simulation
  * Handles zooming, panning, and drawing all visual elements
  * Enhanced with lunar effects visualization
+ * Modified to use SatelliteTrail class for trail management
  */
 public class SimulationPanel extends JPanel {
     // Zoom and pan state variables
@@ -19,8 +20,8 @@ public class SimulationPanel extends JPanel {
     private double offsetX = 0; // Horizontal pan offset
     private double offsetY = 0; // Vertical pan offset
     
-    // Satellite trail for showing recent orbital path
-    private List<Point2D.Double> trail = new ArrayList<>(); // Changed to store world coordinates
+    // Satellite trail for showing recent orbital path - now using extracted class
+    private SatelliteTrail satelliteTrail;
     
     // Reference to the main simulation for accessing parameters
     private OrbitalSimulation simulation;
@@ -30,6 +31,14 @@ public class SimulationPanel extends JPanel {
      */
     public SimulationPanel(OrbitalSimulation simulation) {
         this.simulation = simulation;
+        
+        // Initialize satellite trail with simulation settings
+        this.satelliteTrail = new SatelliteTrail(
+            simulation.getMaxTrailLength(),
+            simulation.getTrailWidth(),
+            simulation.getTrailColor()
+        );
+        
         setBackground(Color.BLACK); // Space background
         
         // Mouse wheel listener for zooming functionality
@@ -91,10 +100,12 @@ public class SimulationPanel extends JPanel {
      * Updates display settings when changed in options
      */
     public void updateSettings() {
-        // Trim trail if it's longer than new max length
-        while (trail.size() > simulation.getMaxTrailLength()) {
-            trail.remove(0);
-        }
+        // Update trail settings using the new trail class
+        satelliteTrail.updateSettings(
+            simulation.getMaxTrailLength(),
+            simulation.getTrailWidth(),
+            simulation.getTrailColor()
+        );
     }
     
     /**
@@ -131,10 +142,10 @@ public class SimulationPanel extends JPanel {
     }
     
     /**
-     * Clears the satellite trail (used when resetting simulation)
+     * Clears the satellite trail (now using extracted trail class)
      */
     public void clearTrail() {
-        trail.clear();
+        satelliteTrail.clear();
     }
     
     /**
@@ -208,27 +219,11 @@ public class SimulationPanel extends JPanel {
             int satX = centerX + (int) (pos[0] * currentScale); // Convert to screen X
             int satY = centerY - (int) (pos[1] * currentScale); // Convert to screen Y (flip Y axis)
             
-            // UPDATE TRAIL: Add current position to satellite trail (store in world coordinates)
-            trail.add(new Point2D.Double(pos[0], pos[1])); // Store actual world position in meters
-            if (trail.size() > simulation.getMaxTrailLength()) {
-                trail.remove(0); // Remove oldest point to maintain trail length
-            }
+            // UPDATE TRAIL: Add current position to satellite trail (using extracted trail class)
+            satelliteTrail.addPoint(pos[0], pos[1]);
             
-            // DRAW TRAIL: Show satellite's recent orbital path (convert world coords to screen coords)
-            g2d.setColor(simulation.getTrailColor());
-            g2d.setStroke(new BasicStroke(simulation.getTrailWidth() * (float)Math.max(1, zoomFactor))); // Scale line thickness with zoom and use trail width setting
-            for (int i = 1; i < trail.size(); i++) {
-                Point2D.Double p1World = trail.get(i - 1);
-                Point2D.Double p2World = trail.get(i);
-                
-                // Convert world coordinates to screen coordinates
-                int p1x = centerX + (int)(p1World.x * currentScale);
-                int p1y = centerY - (int)(p1World.y * currentScale);
-                int p2x = centerX + (int)(p2World.x * currentScale);
-                int p2y = centerY - (int)(p2World.y * currentScale);
-                
-                g2d.drawLine(p1x, p1y, p2x, p2y); // Connect consecutive trail points
-            }
+            // DRAW TRAIL: Show satellite's recent orbital path (using extracted trail class)
+            satelliteTrail.draw(g2d, currentScale, centerX, centerY, zoomFactor);
             
             // DRAW SATELLITE: Render satellite as an image or colored dot
             BufferedImage satImage = simulation.getSatelliteImage();
@@ -299,7 +294,7 @@ public class SimulationPanel extends JPanel {
         try {
             BufferedImage moonImage = null;
             try {
-                File moonFile = new File("src/Moon.png");
+                File moonFile = new File("src/resources/Moon.png"); // UPDATED PATH
                 if (moonFile.exists()) {
                     moonImage = javax.imageio.ImageIO.read(moonFile);
                 }
