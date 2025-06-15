@@ -8,11 +8,9 @@ import java.io.File;
 import javax.swing.*;
 import javax.imageio.ImageIO;
 
-/**
+/*
  * Custom JPanel for rendering the orbital simulation
  * Handles zooming, panning, and drawing all visual elements
- * Enhanced with lunar effects visualization
- * Modified to use SatelliteTrail class for trail management
  */
 public class SimulationPanel extends JPanel {
     // Zoom and pan state variables
@@ -581,6 +579,8 @@ public class SimulationPanel extends JPanel {
     
     /**
      * Draws real-time orbital information as text overlay
+     * ENHANCED: Now includes specific mechanical energy, specific angular momentum,
+     * acceleration from Sun/Moon, and flight path angle
      * 
      * @param g2d Graphics context for text rendering
      * @param satellite The satellite object containing orbital data
@@ -591,37 +591,85 @@ public class SimulationPanel extends JPanel {
         
         // Calculate current orbital parameters from satellite state
         double[] pos = satellite.getPosition();
+        double[] pos3D = satellite.getPosition3D();
+        double satX = pos[0];
+        double satY = pos[1];
+        double satZ = pos3D[2];
+        
+        // Calculate distance from celestial body center
+        double distanceFromCenter = Math.sqrt(satX * satX + satY * satY + satZ * satZ);
         
         // Calculate altitude: distance from celestial body surface
-        // √(x² + y²) gives distance from body center, subtract body radius
-        double altitude = (Math.sqrt(pos[0] * pos[0] + pos[1] * pos[1]) - simulation.getEarthRadius()) / 1000;
+        double altitude = (distanceFromCenter - simulation.getEarthRadius()) / 1000;
         
         // Get current orbital velocity and period from satellite
         double velocity = satellite.getVelocity(); // m/s
         double period = satellite.getOrbitalPeriod() / 3600; // Convert seconds to hours
         
-        // Format information strings for display
-        String[] info = {
-            String.format("%s Altitude: %.1f km", simulation.getCurrentBody(), altitude),
-            String.format("Velocity: %.2f km/s", velocity / 1000), // Convert m/s to km/s
-            String.format("Period: %.2f hours", period),
-            String.format("True Anomaly: %.1f°", Math.toDegrees(satellite.getTrueAnomaly()))
-        };
+        // === NEW CALCULATIONS ===
         
-        // === FIXED: Add effects information if enabled ===
+        // 1. Specific Mechanical Energy (ε = v²/2 - μ/r)
+        double mu = simulation.getGravitationalConstant() * simulation.getEarthMass();
+        double specificEnergy = (velocity * velocity) / 2.0 - mu / distanceFromCenter; // J/kg
+        
+        // 2. Specific Angular Momentum (h = r × v)
+        // For simplified 2D case: |h| = |r| * |v| * sin(γ) where γ is flight path angle
+        // We'll calculate the full cross product for accuracy
+        double[] vel3D = calculateVelocityVector3D(satellite);
+        double angMomX = pos3D[1] * vel3D[2] - pos3D[2] * vel3D[1];
+        double angMomY = pos3D[2] * vel3D[0] - pos3D[0] * vel3D[2];
+        double angMomZ = pos3D[0] * vel3D[1] - pos3D[1] * vel3D[0];
+        double specificAngularMomentum = Math.sqrt(angMomX*angMomX + angMomY*angMomY + angMomZ*angMomZ);
+        
+        // 3. Flight Path Angle (γ = angle between velocity vector and local horizontal)
+        // Local horizontal is perpendicular to position vector
+        double velRadial = (satX * vel3D[0] + satY * vel3D[1] + satZ * vel3D[2]) / distanceFromCenter;
+        double flightPathAngle = Math.toDegrees(Math.asin(velRadial / velocity));
+        
+        // 4. Calculate individual accelerations from Sun and Moon
+        double moonAccelMagnitude = 0;
+        double sunAccelMagnitude = 0;
+        
+        if (simulation.isLunarEffectsEnabled()) {
+            moonAccelMagnitude = calculateLunarAcceleration(pos3D);
+        }
+        
+        if (simulation.isSolarEffectsEnabled()) {
+            sunAccelMagnitude = calculateSolarAcceleration(pos3D);
+        }
+        
+        // Format information strings for display
+        java.util.List<String> infoList = new java.util.ArrayList<>();
+        
+        // Basic orbital parameters
+        infoList.add(String.format("%s Altitude: %.1f km", simulation.getCurrentBody(), altitude));
+        infoList.add(String.format("Velocity: %.2f km/s", velocity / 1000));
+        infoList.add(String.format("Period: %.2f hours", period));
+        infoList.add(String.format("True Anomaly: %.1f°", Math.toDegrees(satellite.getTrueAnomaly())));
+        
+        // New advanced parameters
+        infoList.add(String.format("Specific Energy: %.2f MJ/kg", specificEnergy / 1e6));
+        infoList.add(String.format("Angular Momentum: %.2e m²/s", specificAngularMomentum));
+        infoList.add(String.format("Flight Path Angle: %.2f°", flightPathAngle));
+        
+        // Perturbation accelerations
+        if (simulation.isLunarEffectsEnabled()) {
+            infoList.add(String.format("Lunar Acceleration: %.3e m/s²", moonAccelMagnitude));
+        }
+        
+        if (simulation.isSolarEffectsEnabled()) {
+            infoList.add(String.format("Solar Acceleration: %.3e m/s²", sunAccelMagnitude));
+        }
+        
+        // === Effects information if enabled ===
         if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled()) {
-            String[] expandedInfo = new String[info.length + (simulation.isLunarEffectsEnabled() ? 2 : 0) + (simulation.isSolarEffectsEnabled() ? 2 : 0)];
-            System.arraycopy(info, 0, expandedInfo, 0, info.length);
-            int infoIndex = info.length;
-            
             if (simulation.isLunarEffectsEnabled()) {
                 // Calculate Moon's current angle
                 double[] moonPos = simulation.getMoonPosition();
                 double moonAngle = Math.toDegrees(Math.atan2(moonPos[1], moonPos[0]));
                 if (moonAngle < 0) moonAngle += 360; // Normalize to 0-360 degrees
                 
-                expandedInfo[infoIndex++] = String.format("Moon Position: %.1f°", moonAngle);
-                expandedInfo[infoIndex++] = "Lunar Perturbations: Active";
+                infoList.add(String.format("Moon Position: %.1f°", moonAngle));
             }
             
             if (simulation.isSolarEffectsEnabled()) {
@@ -630,16 +678,112 @@ public class SimulationPanel extends JPanel {
                 double sunAngle = Math.toDegrees(Math.atan2(sunPos[1], sunPos[0]));
                 if (sunAngle < 0) sunAngle += 360; // Normalize to 0-360 degrees
                 
-                expandedInfo[infoIndex++] = String.format("Sun Position: %.1f°", sunAngle);
-                expandedInfo[infoIndex++] = "Solar Perturbations: Active";
+                infoList.add(String.format("Sun Position: %.1f°", sunAngle));
             }
-            
-            info = expandedInfo;
         }
+        
+        // Convert list to array for drawing
+        String[] info = infoList.toArray(new String[0]);
         
         // Draw information text in top-left corner
         for (int i = 0; i < info.length; i++) {
             g2d.drawString(info[i], 10, 20 + i * 15);
         }
+    }
+    
+    /**
+     * Calculates the 3D velocity vector of the satellite
+     * Uses numerical differentiation of position over a small time step
+     */
+    private double[] calculateVelocityVector3D(Satellite satellite) {
+        // Get current orbital elements
+        double a = simulation.getSemiMajorAxis();
+        double e = simulation.getEccentricity();
+        double nu = satellite.getTrueAnomaly();
+        double omega = Math.toRadians(simulation.getArgumentOfPeriapsis());
+        double i = Math.toRadians(simulation.getInclination());
+        double Omega = Math.toRadians(simulation.getLongitudeOfAscendingNode());
+        
+        // Calculate orbital velocity components using orbital mechanics formulas
+        double mu = simulation.getGravitationalConstant() * simulation.getEarthMass();
+        double r = OrbitTransforms.getOrbitalRadius(a, e, nu);
+        
+        // Velocity magnitude from vis-viva equation
+        double v = Math.sqrt(mu * (2.0/r - 1.0/a));
+        
+        // In orbital frame, velocity is perpendicular to radius vector
+        // For elliptical orbit: v_r = (μ*e*sin(ν))/h, v_θ = (μ*(1+e*cos(ν)))/h
+        double h = Math.sqrt(mu * a * (1 - e*e)); // Specific angular momentum
+        double v_radial = (mu * e * Math.sin(nu)) / h;
+        double v_tangential = (mu * (1 + e * Math.cos(nu))) / h;
+        
+        // Convert to orbital plane Cartesian coordinates
+        double vx_orbital = v_radial * Math.cos(nu) - v_tangential * Math.sin(nu);
+        double vy_orbital = v_radial * Math.sin(nu) + v_tangential * Math.cos(nu);
+        double vz_orbital = 0;
+        
+        // Transform to Earth-centered coordinates using same rotations as position
+        // Apply argument of periapsis rotation
+        double vx1 = vx_orbital * Math.cos(omega) - vy_orbital * Math.sin(omega);
+        double vy1 = vx_orbital * Math.sin(omega) + vy_orbital * Math.cos(omega);
+        double vz1 = vz_orbital;
+        
+        // Apply inclination rotation
+        double vx2 = vx1;
+        double vy2 = vy1 * Math.cos(i) - vz1 * Math.sin(i);
+        double vz2 = vy1 * Math.sin(i) + vz1 * Math.cos(i);
+        
+        // Apply longitude of ascending node rotation
+        double vx3 = vx2 * Math.cos(Omega) - vy2 * Math.sin(Omega);
+        double vy3 = vx2 * Math.sin(Omega) + vy2 * Math.cos(Omega);
+        double vz3 = vz2;
+        
+        return new double[]{vx3, vy3, vz3};
+    }
+    
+    /**
+     * Calculates the magnitude of gravitational acceleration from the Moon
+     */
+    private double calculateLunarAcceleration(double[] satPos) {
+        double[] moonPos = simulation.getMoonPosition();
+        double moonX = moonPos[0];
+        double moonY = moonPos[1];
+        double moonZ = 0; // Simplified to 2D
+        
+        // Vector from satellite to Moon
+        double satToMoonX = moonX - satPos[0];
+        double satToMoonY = moonY - satPos[1];
+        double satToMoonZ = moonZ - satPos[2];
+        double satMoonDistance = Math.sqrt(satToMoonX*satToMoonX + satToMoonY*satToMoonY + satToMoonZ*satToMoonZ);
+        
+        if (satMoonDistance > 0) {
+            double moonMass = 7.342e22; // Moon mass in kg
+            double G = 6.67430e-11; // Gravitational constant
+            return G * moonMass / (satMoonDistance * satMoonDistance);
+        }
+        return 0;
+    }
+    
+    /**
+     * Calculates the magnitude of gravitational acceleration from the Sun
+     */
+    private double calculateSolarAcceleration(double[] satPos) {
+        double[] sunPos = simulation.getSunPosition();
+        double sunX = sunPos[0];
+        double sunY = sunPos[1];
+        double sunZ = 0; // Simplified to 2D
+        
+        // Vector from satellite to Sun
+        double satToSunX = sunX - satPos[0];
+        double satToSunY = sunY - satPos[1];
+        double satToSunZ = sunZ - satPos[2];
+        double satSunDistance = Math.sqrt(satToSunX*satToSunX + satToSunY*satToSunY + satToSunZ*satToSunZ);
+        
+        if (satSunDistance > 0) {
+            double sunMass = 1.989e30; // Sun mass in kg
+            double G = 6.67430e-11; // Gravitational constant
+            return G * sunMass / (satSunDistance * satSunDistance);
+        }
+        return 0;
     }
 }

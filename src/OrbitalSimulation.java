@@ -13,12 +13,8 @@ import java.util.List;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-/**
+/*
  * Orbital Mechanics Simulation Program By Yaman Saran
- * Enhanced with Lunar Effects and Date/Time Control
- * 
- * Now includes ability to change simulation date/time while paused,
- * with celestial bodies updating to their correct positions.
  */
 public class OrbitalSimulation extends JFrame {
     // Window dimensions and layout constants
@@ -115,6 +111,22 @@ public class OrbitalSimulation extends JFrame {
         put("Neptune", new double[]{24622000, 1.024e26, 6.67430e-11});
         put("Pluto", new double[]{1188300, 1.309e22, 6.67430e-11});
         put("Tatooine", new double[]{5232500, 3e24, 6.67430e-11});
+    }};
+
+    // === NEW: Sample Orbit Definitions ===
+    // Format: {semiMajorAxis_km, eccentricity, inclination_deg, argPeriapsis_deg, longAscNode_deg, trueAnomaly_deg}
+    private static final Map<String, double[]> SAMPLE_ORBITS = new LinkedHashMap<String, double[]>() {{
+        put("LEO (ISS)", new double[]{6778, 0.0003, 51.6, 0, 0, 0}); // Low Earth Orbit - ISS
+        put("LEO Polar", new double[]{6678, 0.001, 98.2, 0, 0, 0}); // Polar LEO
+        put("MEO (GPS)", new double[]{26560, 0.02, 55.0, 0, 0, 0}); // Medium Earth Orbit - GPS
+        put("GEO", new double[]{42164, 0.0, 0.0, 0, 0, 0}); // Geostationary Orbit
+        put("GTO", new double[]{24371, 0.73, 28.5, 178, 0, 0}); // Geostationary Transfer Orbit
+        put("Molniya", new double[]{26600, 0.74, 63.4, 270, 0, 0}); // Molniya orbit
+        put("Tundra", new double[]{42164, 0.27, 63.4, 270, 0, 0}); // Tundra orbit
+        put("Sun-Sync", new double[]{7178, 0.001, 98.7, 0, 0, 0}); // Sun-synchronous orbit
+        put("Highly Elliptical", new double[]{30000, 0.8, 45.0, 0, 0, 0}); // Generic HEO
+        put("Lunar Transfer", new double[]{200000, 0.97, 28.5, 0, 0, 0}); // Lunar transfer-like orbit
+        put("Escape Trajectory", new double[]{-50000, 1.1, 0, 0, 0, 0}); // Hyperbolic escape
     }};
 
     /**
@@ -235,6 +247,88 @@ public class OrbitalSimulation extends JFrame {
      */
     public boolean isPaused() {
         return isPaused;
+    }
+
+     /**
+     * === NEW: Applies a sample orbit configuration ===
+     */
+    public void applySampleOrbit(String orbitName) {
+        if (SAMPLE_ORBITS.containsKey(orbitName)) {
+            double[] orbitData = SAMPLE_ORBITS.get(orbitName);
+            
+            // Set orbital elements
+            semiMajorAxis = orbitData[0] * 1000; // Convert km to meters
+            eccentricity = orbitData[1];
+            inclination = orbitData[2];
+            argumentOfPeriapsis = orbitData[3];
+            longitudeOfAscendingNode = orbitData[4];
+            trueAnomaly = orbitData[5];
+            
+            // Handle special cases for hyperbolic orbits
+            if (semiMajorAxis < 0) {
+                // For hyperbolic orbits, ensure we're above Earth's surface
+                semiMajorAxis = Math.abs(semiMajorAxis);
+            }
+            
+            // Ensure altitude is reasonable (at least 150 km above surface)
+            double minSemiMajorAxis = earthRadius + 150000; // 150 km minimum altitude
+            if (semiMajorAxis < minSemiMajorAxis) {
+                semiMajorAxis = minSemiMajorAxis;
+            }
+            
+            // Create new satellite with updated parameters
+            createSatellite();
+            
+            // Clear trail if auto-clear is enabled
+            if (autoClearOnUpdate) {
+                simulationPanel.clearTrail();
+            }
+            
+            // Reset zoom to show the new orbit better
+            simulationPanel.resetZoom();
+            
+            // Repaint to show changes
+            simulationPanel.repaint();
+        }
+    }
+
+     /**
+     * === NEW: Returns the sample orbits map for UI components ===
+     */
+    public Map<String, double[]> getSampleOrbits() {
+        return SAMPLE_ORBITS;
+    }
+    
+    /**
+     * === NEW: Returns a description of the selected orbit type ===
+     */
+    private String getOrbitDescription(String orbitName) {
+        switch (orbitName) {
+            case "LEO (ISS)":
+                return "Low Earth Orbit matching the International Space Station. Altitude ~408 km, inclined 51.6°.";
+            case "LEO Polar":
+                return "Polar Low Earth Orbit. Passes over both poles, useful for Earth observation.";
+            case "MEO (GPS)":
+                return "Medium Earth Orbit used by GPS satellites. 12-hour period, inclined 55°.";
+            case "GEO":
+                return "Geostationary Orbit. 24-hour period, appears stationary over Earth's equator.";
+            case "GTO":
+                return "Geostationary Transfer Orbit. Highly elliptical orbit used to reach GEO.";
+            case "Molniya":
+                return "Russian communications orbit. 12-hour period, high apogee over northern hemisphere.";
+            case "Tundra":
+                return "24-hour elliptical orbit with high apogee over northern latitudes.";
+            case "Sun-Sync":
+                return "Sun-synchronous orbit. Orbital plane precesses to match Earth's orbital motion.";
+            case "Highly Elliptical":
+                return "Generic highly elliptical orbit with high eccentricity.";
+            case "Lunar Transfer":
+                return "High-energy orbit that could reach the Moon's sphere of influence.";
+            case "Escape Trajectory":
+                return "Hyperbolic trajectory with velocity exceeding Earth's escape velocity.";
+            default:
+                return "Sample orbital configuration.";
+        }
     }
     
     /**
@@ -505,6 +599,18 @@ public class OrbitalSimulation extends JFrame {
         JTextField incField = new JTextField(String.valueOf(inclination), 10);
         incField.setPreferredSize(new Dimension(100, 25));
         panel.add(incField, gbc);
+
+            // === NEW: Sample Orbits Dropdown ===
+        gbc.gridx = 6;
+        panel.add(new JLabel("Sample Orbits:"), gbc);
+        gbc.gridx = 7;
+        String[] orbitNames = SAMPLE_ORBITS.keySet().toArray(new String[0]);
+        JComboBox<String> sampleOrbitCombo = new JComboBox<>(orbitNames);
+        sampleOrbitCombo.setPreferredSize(new Dimension(140, 25));
+        sampleOrbitCombo.setSelectedIndex(-1); // No selection initially
+        panel.add(sampleOrbitCombo, gbc);
+
+        
         
         // ROW 2: Secondary orbital parameters and control buttons
         gbc.gridy = 1;
@@ -532,6 +638,14 @@ public class OrbitalSimulation extends JFrame {
         JButton toggleElementsButton = new JButton("Switch to Equinoctial");
         toggleElementsButton.setPreferredSize(new Dimension(150, 30));
         panel.add(toggleElementsButton, gbc);
+
+          // === NEW: Apply Sample Orbit Button ===
+        gbc.gridx = 6;
+        gbc.gridwidth = 2;
+        JButton applySampleButton = new JButton("Apply Sample Orbit");
+        applySampleButton.setPreferredSize(new Dimension(140, 30));
+        panel.add(applySampleButton, gbc);
+        gbc.gridwidth = 1; // Reset
         
         // ROW 2.5: Date/Time Display and Button
         gbc.gridy = 2;
@@ -663,6 +777,41 @@ public class OrbitalSimulation extends JFrame {
         toggleElementsButton.addActionListener(e -> {
             useEquinoctialElements = !useEquinoctialElements;
             updateFieldLabels(panel, gbc, toggleElementsButton, smaField, eccField, incField, argPeriField, lanField);
+        });
+
+         // === NEW: Sample Orbit Selection Listener ===
+        sampleOrbitCombo.addActionListener(e -> {
+            String selectedOrbit = (String) sampleOrbitCombo.getSelectedItem();
+            if (selectedOrbit != null && SAMPLE_ORBITS.containsKey(selectedOrbit)) {
+                double[] orbitData = SAMPLE_ORBITS.get(selectedOrbit);
+                
+                // Update the text fields with the sample orbit values
+                smaField.setText(String.valueOf(orbitData[0])); // Already in km
+                eccField.setText(String.valueOf(orbitData[1]));
+                incField.setText(String.valueOf(orbitData[2]));
+                argPeriField.setText(String.valueOf(orbitData[3]));
+                lanField.setText(String.valueOf(orbitData[4]));
+                
+                // Show orbit description in a tooltip or status message
+                sampleOrbitCombo.setToolTipText(getOrbitDescription(selectedOrbit));
+            }
+        });
+        
+        // === NEW: Apply Sample Orbit Button Listener ===
+        applySampleButton.addActionListener(e -> {
+            String selectedOrbit = (String) sampleOrbitCombo.getSelectedItem();
+            if (selectedOrbit != null) {
+                applySampleOrbit(selectedOrbit);
+                JOptionPane.showMessageDialog(this, 
+                    "Applied " + selectedOrbit + " orbit!\n" + getOrbitDescription(selectedOrbit),
+                    "Sample Orbit Applied", 
+                    JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this, 
+                    "Please select a sample orbit from the dropdown first.",
+                    "No Orbit Selected", 
+                    JOptionPane.WARNING_MESSAGE);
+            }
         });
         
         // Time Speed Controls

@@ -7,10 +7,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import javax.swing.*;
 
-/**
+/*
  * OrbitalDialogManager handles all dialog windows for the orbital simulation
- * Enhanced with Date/Time picker dialog for adjusting simulation time
- * Restructured date/time dialog for better text area visibility
  */
 public class OrbitalDialogManager {
     private OrbitalSimulation simulation;

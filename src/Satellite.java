@@ -1,8 +1,6 @@
-/**
+/*
  * Satellite class that handles orbital mechanics calculations
  * Implements Kepler's laws and coordinate transformations
- * Enhanced with lunar and solar gravitational perturbations using separate force calculators
- * Modified to use OrbitTransforms class for coordinate transformations
  */
 public class Satellite {
     private double a, e, i, omega, Omega; // Orbital elements

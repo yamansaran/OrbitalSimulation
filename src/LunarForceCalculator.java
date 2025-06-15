@@ -1,4 +1,5 @@
-/**
+/*
+ * 
  * LunarForceCalculator class handles lunar gravitational perturbations
  * Separated from Satellite class for better code organization and modularity
  */
@@ -6,7 +7,7 @@ public class LunarForceCalculator {
     private static final double MOON_MASS = 7.342e22; // Moon's mass in kg
     private static final double MOON_EARTH_DISTANCE = 384400000; // Average Moon-Earth distance in meters
     
-    /**
+    /*
      * Applies lunar gravitational perturbations to satellite orbital elements
      * 
      * This method simulates the Moon's gravitational influence on the satellite's orbit.
