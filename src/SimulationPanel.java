@@ -87,7 +87,7 @@ public class SimulationPanel extends JPanel {
             public void mouseReleased(MouseEvent e) {
                 lastPanPoint = null;
             }
-    };
+        };
         
         // Attach mouse handlers to panel
         addMouseListener(mouseHandler);
@@ -207,6 +207,11 @@ public class SimulationPanel extends JPanel {
             drawCombinedAccelerationVector(g2d, centerX, centerY, currentScale);
         }
         
+        // === NEW: DRAW ATMOSPHERIC DRAG ACCELERATION VECTOR ===
+        if (simulation.isAtmosphericDragEnabled()) {
+            drawAtmosphericDragVector(g2d, centerX, centerY, currentScale);
+        }
+        
         Satellite satellite = simulation.getSatellite();
         if (satellite != null) {
             // DRAW ORBITAL PATH: Show the complete elliptical orbit
@@ -247,15 +252,29 @@ public class SimulationPanel extends JPanel {
         g2d.drawString(String.format("Zoom: %.1fx", zoomFactor), getWidth() - 100, 20);
         g2d.drawString("Mouse wheel: zoom, drag: pan", getWidth() - 200, getHeight() - 10);
         
-        // === FIXED: Show effects status ===
-        if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled()) {
+        // === UPDATED: Show effects status ===
+        if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled() || simulation.isAtmosphericDragEnabled()) {
             g2d.setColor(Color.YELLOW);
             String effectsStatus = "";
-            if (simulation.isLunarEffectsEnabled() && simulation.isSolarEffectsEnabled()) {
+            if (simulation.isLunarEffectsEnabled() && simulation.isSolarEffectsEnabled() && simulation.isAtmosphericDragEnabled()) {
+                effectsStatus = "Lunar + Solar + Drag Effects: ON";
+                // Add info about the acceleration vectors
+                g2d.setColor(Color.CYAN);
+                g2d.drawString("Blue line = Combined gravity, Gray line = Atmospheric drag", getWidth() - 380, 60);
+            } else if (simulation.isLunarEffectsEnabled() && simulation.isSolarEffectsEnabled()) {
                 effectsStatus = "Lunar + Solar Effects: ON";
-                // Add info about the blue acceleration vector
                 g2d.setColor(Color.CYAN);
                 g2d.drawString("Blue line = Combined acceleration vector", getWidth() - 280, 60);
+            } else if (simulation.isAtmosphericDragEnabled()) {
+                if (simulation.isLunarEffectsEnabled()) {
+                    effectsStatus = "Lunar + Drag Effects: ON";
+                } else if (simulation.isSolarEffectsEnabled()) {
+                    effectsStatus = "Solar + Drag Effects: ON";
+                } else {
+                    effectsStatus = "Atmospheric Drag: ON";
+                }
+                g2d.setColor(Color.CYAN);
+                g2d.drawString("Gray line = Atmospheric drag vector", getWidth() - 250, 60);
             } else if (simulation.isLunarEffectsEnabled()) {
                 effectsStatus = "Lunar Effects: ON";
             } else if (simulation.isSolarEffectsEnabled()) {
@@ -518,6 +537,84 @@ public class SimulationPanel extends JPanel {
             }
         }
     }
+    
+    /**
+     * === NEW: Draws the atmospheric drag acceleration vector ===
+     * Shows drag force direction (opposite to velocity) when satellite is in atmosphere
+     * 
+     * @param g2d Graphics context for drawing
+     * @param centerX Screen X coordinate of Earth's center
+     * @param centerY Screen Y coordinate of Earth's center  
+     * @param currentScale Current meter-to-pixel conversion factor
+     */
+    private void drawAtmosphericDragVector(Graphics2D g2d, int centerX, int centerY, double currentScale) {
+        Satellite satellite = simulation.getSatellite();
+        if (satellite == null) return;
+        
+        // Get current drag acceleration
+        double dragAcceleration = satellite.getDragAcceleration();
+        if (dragAcceleration <= 0) return; // No drag or satellite outside atmosphere
+        
+        // Get satellite position and velocity for drag direction calculation
+        double[] satPos = satellite.getPosition();
+        double satX = satPos[0];
+        double satY = satPos[1];
+        
+        // Calculate velocity vector direction using orbital mechanics
+        double[] vel3D = calculateVelocityVector3D(satellite);
+        double velX = vel3D[0];
+        double velY = vel3D[1];
+        double velMagnitude = Math.sqrt(velX * velX + velY * velY);
+        
+        if (velMagnitude <= 0) return; // No velocity
+        
+        // Drag direction is opposite to velocity direction
+        double dragDirX = -velX / velMagnitude;
+        double dragDirY = -velY / velMagnitude;
+        
+        // Scale the vector length for visibility
+        // Use logarithmic scaling to handle wide range of acceleration values
+        double baseLength = 80; // Base length in pixels
+        double scaleFactor = Math.log10(dragAcceleration * 1e4 + 1) * 20; // Scale factor
+        double vectorLength = Math.min(baseLength + scaleFactor, 200); // Cap at 200 pixels
+        
+        // Get satellite screen position
+        int satScreenX = centerX + (int)(satX * currentScale);
+        int satScreenY = centerY - (int)(satY * currentScale);
+        
+        // Calculate end point of drag vector
+        int vectorEndX = satScreenX + (int)(dragDirX * vectorLength);
+        int vectorEndY = satScreenY - (int)(dragDirY * vectorLength); // Flip Y axis
+        
+        // Draw the atmospheric drag vector as a thick gray line
+        g2d.setColor(simulation.getDragColor());
+        g2d.setStroke(new BasicStroke(4.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(satScreenX, satScreenY, vectorEndX, vectorEndY);
+        
+        // Draw arrowhead to show direction
+        drawArrowHead(g2d, satScreenX, satScreenY, vectorEndX, vectorEndY, simulation.getDragColor());
+        
+        // Add a small gray circle at the satellite position to mark the origin
+        g2d.setColor(simulation.getDragColor());
+        g2d.fillOval(satScreenX - 3, satScreenY - 3, 6, 6);
+        
+        // Optional: Draw magnitude indicator text
+        if (vectorLength > 60) { // Only show text if vector is long enough
+            g2d.setColor(simulation.getDragColor());
+            g2d.setFont(new Font("Arial", Font.BOLD, 10));
+            String magnitudeText = String.format("Drag: %.2e m/s²", dragAcceleration);
+            
+            // Position text near the end of vector
+            int textX = vectorEndX + 10;
+            int textY = vectorEndY - 5;
+            
+            // Keep text on screen
+            if (textX > getWidth() - 100) textX = vectorEndX - 100;
+            if (textY < 15) textY = vectorEndY + 15;
+            
+            g2d.drawString(magnitudeText, textX, textY);
+        }
+    }
      
     private void drawArrowHead(Graphics2D g2d, int startX, int startY, int endX, int endY, Color color) {
         // Calculate arrow direction
@@ -580,7 +677,7 @@ public class SimulationPanel extends JPanel {
     /**
      * Draws real-time orbital information as text overlay
      * ENHANCED: Now includes specific mechanical energy, specific angular momentum,
-     * acceleration from Sun/Moon, and flight path angle
+     * acceleration from Sun/Moon/Drag, and flight path angle
      * 
      * @param g2d Graphics context for text rendering
      * @param satellite The satellite object containing orbital data
@@ -661,6 +758,20 @@ public class SimulationPanel extends JPanel {
             infoList.add(String.format("Solar Acceleration: %.3e m/s²", sunAccelMagnitude));
         }
         
+        // NEW: Atmospheric drag acceleration
+        if (simulation.isAtmosphericDragEnabled()) {
+            double dragAccel = satellite.getDragAcceleration();
+            if (dragAccel > 0) {
+                infoList.add(String.format("Drag Acceleration: %.3e m/s²", dragAccel));
+                
+                // Calculate and show atmospheric density using existing altitude variable
+                double density = 1.225 * Math.exp(-(altitude * 1000) / 8500.0); // Convert km to m, same model as in calculator
+                infoList.add(String.format("Atmospheric Density: %.3e kg/m³", density));
+            } else {
+                infoList.add("Drag: N/A (outside atmosphere)");
+            }
+        }
+        
         // === Effects information if enabled ===
         if (simulation.isLunarEffectsEnabled() || simulation.isSolarEffectsEnabled()) {
             if (simulation.isLunarEffectsEnabled()) {
@@ -693,7 +804,7 @@ public class SimulationPanel extends JPanel {
     
     /**
      * Calculates the 3D velocity vector of the satellite
-     * Uses numerical differentiation of position over a small time step
+     * Uses orbital mechanics formulas for accurate velocity calculation
      */
     private double[] calculateVelocityVector3D(Satellite satellite) {
         // Get current orbital elements
@@ -707,9 +818,6 @@ public class SimulationPanel extends JPanel {
         // Calculate orbital velocity components using orbital mechanics formulas
         double mu = simulation.getGravitationalConstant() * simulation.getEarthMass();
         double r = OrbitTransforms.getOrbitalRadius(a, e, nu);
-        
-        // Velocity magnitude from vis-viva equation
-        double v = Math.sqrt(mu * (2.0/r - 1.0/a));
         
         // In orbital frame, velocity is perpendicular to radius vector
         // For elliptical orbit: v_r = (μ*e*sin(ν))/h, v_θ = (μ*(1+e*cos(ν)))/h

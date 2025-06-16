@@ -9,12 +9,14 @@ public class Satellite {
     private double gravitationalConstant;
     private double earthMass;
     
-    // === NEW: Lunar and Solar effects system with separate calculators ===
+    // === ENHANCED: Lunar, Solar, and Atmospheric effects system with separate calculators ===
     private boolean lunarEffectsEnabled;
     private boolean solarEffectsEnabled;
+    private boolean atmosphericDragEnabled; // NEW: Atmospheric drag toggle
     private OrbitalSimulation simulation; // Reference to get Moon/Sun position and time
     private LunarForceCalculator lunarCalculator; // Separate lunar force calculator
     private SolarForceCalculator solarCalculator; // Separate solar force calculator
+    private AtmosphericDragCalculator dragCalculator; // NEW: Separate atmospheric drag calculator
     
     // Perturbation tracking for orbital element drift
     private double deltaOmega = 0; // Accumulated change in argument of periapsis
@@ -27,7 +29,7 @@ public class Satellite {
     public Satellite(double semiMajorAxis, double eccentricity, double inclination,
                     double argumentOfPeriapsis, double longitudeOfAscendingNode, double trueAnomaly,
                     double gravitationalConstant, double earthMass, boolean lunarEffectsEnabled, 
-                    boolean solarEffectsEnabled, OrbitalSimulation simulation) {
+                    boolean solarEffectsEnabled, boolean atmosphericDragEnabled, OrbitalSimulation simulation) {
         this.a = semiMajorAxis;
         this.e = eccentricity;
         this.i = Math.toRadians(inclination);
@@ -38,11 +40,13 @@ public class Satellite {
         this.earthMass = earthMass;
         this.lunarEffectsEnabled = lunarEffectsEnabled;
         this.solarEffectsEnabled = solarEffectsEnabled;
+        this.atmosphericDragEnabled = atmosphericDragEnabled; // NEW
         this.simulation = simulation;
         
         // Initialize force calculators
         this.lunarCalculator = new LunarForceCalculator();
         this.solarCalculator = new SolarForceCalculator();
+        this.dragCalculator = new AtmosphericDragCalculator(); // NEW
         
         // Calculate mean motion using Kepler's third law: n = √(μ/a³)
         double mu = gravitationalConstant * earthMass; // Standard gravitational parameter
@@ -51,7 +55,7 @@ public class Satellite {
     
     /**
      * Updates satellite position by advancing time
-     * Now includes lunar gravitational perturbations with enhanced adaptive integration
+     * Now includes lunar, solar, and atmospheric drag perturbations with enhanced adaptive integration
      * Optimized for extreme speeds up to 100,000x
      */
     public void updatePosition(double deltaTime) {
@@ -78,8 +82,8 @@ public class Satellite {
     }
     
     /**
-     * === NEW: Performs a single integration step ===
-     * Separated for cleaner adaptive time stepping
+     * === ENHANCED: Performs a single integration step ===
+     * Now includes atmospheric drag perturbations
      */
     private void updateSingleStep(double deltaTime) {
         // Store original orbital elements for perturbation calculations
@@ -96,13 +100,16 @@ public class Satellite {
         // Advance mean anomaly by time step
         M += meanMotion * deltaTime;
         
-        // === Apply lunar and solar perturbations if enabled (before updating position) ===
-        if ((lunarEffectsEnabled || solarEffectsEnabled) && simulation != null) {
+        // === Apply perturbations if enabled (before updating position) ===
+        if ((lunarEffectsEnabled || solarEffectsEnabled || atmosphericDragEnabled) && simulation != null) {
             if (lunarEffectsEnabled) {
                 lunarCalculator.applyPerturbations(this, deltaTime, simulation);
             }
             if (solarEffectsEnabled) {
                 solarCalculator.applyPerturbations(this, deltaTime, simulation);
+            }
+            if (atmosphericDragEnabled) { // NEW: Apply atmospheric drag
+                dragCalculator.applyPerturbations(this, deltaTime, simulation);
             }
         }
         
@@ -187,6 +194,14 @@ public class Satellite {
     public double getInclination() { return i; }
     public double getEccentricity() { return e; }
     public double getEarthMass() { return earthMass; }
+    
+    /**
+     * === NEW: Getter for atmospheric drag acceleration (for display purposes) ===
+     */
+    public double getDragAcceleration() {
+        if (!atmosphericDragEnabled || dragCalculator == null) return 0;
+        return dragCalculator.getCurrentDragAcceleration(this, simulation);
+    }
     
     /**
      * === NEW: Adjustment methods for orbital elements (used by force calculators) ===

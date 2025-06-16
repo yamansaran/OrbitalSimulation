@@ -453,6 +453,7 @@ public class OrbitalSimulation extends JFrame {
             
             lunarEffectsEnabled = false;
             solarEffectsEnabled = false;
+            atmosphericDragEnabled = false;
             currentSimulationTime = 0;
             
             setCelestialBody("Earth");
@@ -513,10 +514,18 @@ public class OrbitalSimulation extends JFrame {
     public Map<String, double[]> getCelestialBodies() { return CELESTIAL_BODIES; }
     public SimulationPanel getSimulationPanel() { return simulationPanel; }
     public double getCurrentSimulationTime() { return currentSimulationTime; }
+    public boolean isAtmosphericDragEnabled() { return atmosphericDragEnabled; }
+    public void setAtmosphericDragEnabled(boolean atmosphericDragEnabled) { this.atmosphericDragEnabled = atmosphericDragEnabled; }
+    public Color getDragColor() { return dragColor; }
+    public void setDragColor(Color dragColor) { this.dragColor = dragColor; }
+
     
     // Lunar and Solar Effects Getters - UPDATED to use currentSimulationTime
     public boolean isLunarEffectsEnabled() { return lunarEffectsEnabled; }
     public boolean isSolarEffectsEnabled() { return solarEffectsEnabled; }
+    private boolean atmosphericDragEnabled = false; // NEW: Atmospheric drag toggle
+    private Color dragColor = Color.GRAY; // NEW: Gray color for drag vector
+
     
     public double[] getMoonPosition() {
         if (!lunarEffectsEnabled) return new double[]{0, 0};
@@ -1007,10 +1016,11 @@ public class OrbitalSimulation extends JFrame {
      * Creates a new satellite object with current orbital parameters
      */
     public void createSatellite() {
-        satellite = new Satellite(semiMajorAxis, eccentricity, inclination, 
-                                argumentOfPeriapsis, longitudeOfAscendingNode, trueAnomaly,
-                                gravitationalConstant, earthMass, lunarEffectsEnabled, solarEffectsEnabled, this);
-    }
+    satellite = new Satellite(semiMajorAxis, eccentricity, inclination, 
+                            argumentOfPeriapsis, longitudeOfAscendingNode, trueAnomaly,
+                            gravitationalConstant, earthMass, lunarEffectsEnabled, 
+                            solarEffectsEnabled, atmosphericDragEnabled, this); // UPDATED: Added atmosphericDragEnabled parameter
+}
     
     /**
      * Starts the animation timer for smooth orbital motion display
