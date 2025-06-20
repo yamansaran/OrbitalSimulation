@@ -108,6 +108,29 @@ public class OrbitalInfoDisplay {
         if (simulation.isAtmosphericDragEnabled()) {
             addDragInfo(infoList, satellite, altitude);
         }
+        if (simulation.isJ2EffectsEnabled()) {
+            double j2Accel = satellite.getJ2Acceleration();
+            double[] j2Rates = satellite.getJ2Rates();
+            infoList.add(String.format("J2 Acceleration: %.3e m/s²", j2Accel));
+            infoList.add(String.format("Nodal Precession: %.3f°/day", j2Rates[0]));
+            infoList.add(String.format("Apsidal Precession: %.3f°/day", j2Rates[1]));
+        }
+        if (simulation.isSolarRadiationPressureEnabled()) {
+        double radiationAccel = satellite.getRadiationPressureAcceleration();
+        SolarRadiationPressureCalculator.ShadowCondition shadowCondition = satellite.getShadowCondition();
+        
+        infoList.add(String.format("Solar Radiation Pressure: %.3e m/s²", radiationAccel));
+        infoList.add(String.format("Shadow Condition: %s", shadowCondition.shadowType));
+        
+        if (shadowCondition.shadowType == SolarRadiationPressureCalculator.ShadowType.PENUMBRA) {
+            infoList.add(String.format("Lighting Factor: %.3f", shadowCondition.lightingFactor));
+        }
+        
+        if (radiationAccel <= 0) {
+            infoList.add("SRP: N/A (in shadow)");
+        }
+}
+
         
         // Celestial body positions
         addCelestialBodyInfo(infoList);
@@ -179,6 +202,7 @@ public class OrbitalInfoDisplay {
         if (simulation.isLunarEffectsEnabled()) activeEffects.add("Lunar");
         if (simulation.isSolarEffectsEnabled()) activeEffects.add("Solar");
         if (simulation.isAtmosphericDragEnabled()) activeEffects.add("Drag");
+        if (simulation.isSolarRadiationPressureEnabled()) activeEffects.add("Radiation");
 
         if (!activeEffects.isEmpty()) {
             g2d.setColor(Color.YELLOW);
@@ -195,10 +219,15 @@ public class OrbitalInfoDisplay {
             if (simulation.isAtmosphericDragEnabled()) {
                 vectorInfo.add("Gray line = Atmospheric drag");
             }
-            
+            if (simulation.isJ2EffectsEnabled()) {
+            vectorInfo.add("Green line = J2 oblateness");
+            }
             if (!vectorInfo.isEmpty()) {
                 String vectorText = String.join(", ", vectorInfo);
                 g2d.drawString(vectorText, width - Math.max(280, vectorText.length() * 7), 60);
+            }
+            if (simulation.isSolarRadiationPressureEnabled()) {
+            vectorInfo.add("Orange line = Solar radiation pressure");
             }
         }
     }

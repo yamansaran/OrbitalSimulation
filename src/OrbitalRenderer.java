@@ -41,6 +41,12 @@ public class OrbitalRenderer {
         if (simulation.isAtmosphericDragEnabled()) {
             drawAtmosphericDragVector(g2d, centerX, centerY, currentScale);
         }
+        if (simulation.isJ2EffectsEnabled()) {
+        drawJ2Vector(g2d, centerX, centerY, currentScale);
+        }
+        if (simulation.isSolarRadiationPressureEnabled()) {
+        drawSolarRadiationVector(g2d, centerX, centerY, currentScale);
+        }
         
         // Draw satellite and orbit
         Satellite satellite = simulation.getSatellite();
@@ -356,6 +362,113 @@ public class OrbitalRenderer {
             g2d.drawString(magnitudeText, textX, textY);
         }
     }
+
+    private void drawSolarRadiationVector(Graphics2D g2d, int centerX, int centerY, double currentScale) {
+    Satellite satellite = simulation.getSatellite();
+    if (satellite == null) return;
+    
+    double radiationAccel = satellite.getRadiationPressureAcceleration();
+    if (radiationAccel <= 0) return; // No acceleration (in shadow or disabled)
+    
+    // Get satellite position on screen
+    double[] satPos = satellite.getPosition();
+    int satScreenX = centerX + (int)(satPos[0] * currentScale);
+    int satScreenY = centerY - (int)(satPos[1] * currentScale);
+    
+    // Get satellite 3D position and sun position
+    double[] satPos3D = satellite.getPosition3D();
+    double[] sunPos = simulation.getSunPosition();
+    
+    // Create sun position in 3D (assume sun at z=0)
+    double[] sunPos3D = {sunPos[0], sunPos[1], 0.0};
+    
+    // Calculate vector FROM satellite TO sun
+    double satToSunX = sunPos3D[0] - satPos3D[0];
+    double satToSunY = sunPos3D[1] - satPos3D[1];
+    double satToSunZ = sunPos3D[2] - satPos3D[2];
+    double satToSunDistance = Math.sqrt(satToSunX*satToSunX + satToSunY*satToSunY + satToSunZ*satToSunZ);
+    
+    // Unit vector FROM satellite TO sun
+    double toSunUnitX = satToSunX / satToSunDistance;
+    double toSunUnitY = satToSunY / satToSunDistance;
+    double toSunUnitZ = satToSunZ / satToSunDistance;
+    
+    // Solar radiation pressure pushes AWAY from sun (opposite direction)
+    double awayFromSunX = -toSunUnitX;  // Opposite direction
+    double awayFromSunY = -toSunUnitY;  // Opposite direction
+    double awayFromSunZ = -toSunUnitZ;  // Opposite direction
+    
+    // Calculate vector length based on acceleration magnitude
+    double baseLength = 50;
+    double scaleFactor = Math.log10(radiationAccel * 1e8 + 1) * 25;
+    double vectorLength = Math.min(baseLength + scaleFactor, 120);
+    
+    // Project 3D away-from-sun direction to 2D screen coordinates
+    // For 2D rendering, we only use X and Y components
+    int vectorEndX = satScreenX + (int)(awayFromSunX * vectorLength);
+    int vectorEndY = satScreenY - (int)(awayFromSunY * vectorLength); // Flip Y for screen coordinates
+    
+    // Get shadow condition for color coding
+    SolarRadiationPressureCalculator.ShadowCondition shadowCondition = satellite.getShadowCondition();
+    
+    // Color code based on shadow condition
+    Color vectorColor;
+    switch (shadowCondition.shadowType) {
+        case DIRECT_SUNLIGHT:
+            vectorColor = Color.ORANGE; // Bright orange for direct sunlight
+            break;
+        case PENUMBRA:
+            // Fade orange based on lighting factor
+            int intensity = (int)(255 * shadowCondition.lightingFactor);
+            vectorColor = new Color(255, intensity, 0); // Orange fading to red
+            break;
+        case UMBRA:
+        default:
+            return; // No vector in complete shadow
+    }
+    
+    // Draw radiation pressure vector
+    g2d.setColor(vectorColor);
+    g2d.setStroke(new BasicStroke(3.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+    g2d.drawLine(satScreenX, satScreenY, vectorEndX, vectorEndY);
+    
+    // Draw arrowhead
+    drawArrowHead(g2d, satScreenX, satScreenY, vectorEndX, vectorEndY, vectorColor);
+    
+    // Add small colored circle at satellite position
+    g2d.setColor(vectorColor);
+    g2d.fillOval(satScreenX - 3, satScreenY - 3, 6, 6);
+    
+    // Draw label if vector is long enough
+    if (vectorLength > 70) {
+        g2d.setColor(vectorColor);
+        g2d.setFont(new Font("Arial", Font.BOLD, 10));
+        
+        String accelerationText = String.format("SRP: %.2e m/s²", radiationAccel);
+        String shadowText = shadowCondition.shadowType.toString();
+        
+        int textX = vectorEndX + 10;
+        int textY = vectorEndY - 5;
+        
+        // Keep text on screen
+        if (textX > 1000) textX = vectorEndX - 120;
+        if (textY < 15) textY = vectorEndY + 25;
+        
+        g2d.drawString(accelerationText, textX, textY);
+        g2d.setFont(new Font("Arial", Font.PLAIN, 9));
+        g2d.drawString(shadowText, textX, textY + 12);
+        
+        // Show lighting factor for penumbra
+        if (shadowCondition.shadowType == SolarRadiationPressureCalculator.ShadowType.PENUMBRA) {
+            String lightingText = String.format("%.1f%% light", shadowCondition.lightingFactor * 100);
+            g2d.drawString(lightingText, textX, textY + 24);
+        }
+        
+        // DEBUG: Show direction info (you can remove this once it's working)
+        g2d.setFont(new Font("Arial", Font.PLAIN, 8));
+        g2d.drawString(String.format("Away: (%.2f,%.2f)", awayFromSunX, awayFromSunY), textX, textY + 36);
+    }
+    }
     
     /**
      * Draws an arrowhead at the end of a vector
@@ -384,4 +497,120 @@ public class OrbitalRenderer {
         g2d.drawLine(endX, endY, (int)leftX, (int)leftY);
         g2d.drawLine(endX, endY, (int)rightX, (int)rightY);
     }
+    private void drawJ2Vector(Graphics2D g2d, int centerX, int centerY, double currentScale) {
+    Satellite satellite = simulation.getSatellite();
+    if (satellite == null) return;
+    
+    double j2Accel = satellite.getJ2Acceleration();
+    if (j2Accel <= 0) return;
+    
+    // Get satellite 3D position for proper J2 calculation
+    double[] satPos3D = satellite.getPosition3D();
+    double satX = satPos3D[0];
+    double satY = satPos3D[1];
+    double satZ = satPos3D[2];
+    
+    // Calculate satellite screen position
+    int satScreenX = centerX + (int)(satX * currentScale);
+    int satScreenY = centerY - (int)(satY * currentScale);
+    
+    // Calculate satellite distance and latitude
+    double r = Math.sqrt(satX*satX + satY*satY + satZ*satZ);
+    double latitude = Math.asin(satZ / r); // Satellite latitude in radians
+    
+    // J2 acceleration components (simplified but more accurate)
+    // J2 creates both radial and tangential accelerations
+    
+    // Radial component (toward/away from Earth center)
+    double radialComponent = j2Accel * (3 * Math.sin(latitude) * Math.sin(latitude) - 1);
+    
+    // Tangential component (perpendicular to radius, toward equator)
+    double tangentialComponent = -j2Accel * 3 * Math.sin(latitude) * Math.cos(latitude);
+    
+    // Convert to Earth-centered Cartesian coordinates
+    // Unit vectors in radial and tangential directions
+    double[] radialUnit = {satX/r, satY/r, satZ/r}; // Points away from Earth center
+    
+    // Tangential component points toward equatorial plane
+    // For simplicity, we'll approximate the tangential direction
+    double[] tangentialUnit = {0, 0, -Math.signum(satZ)}; // Points toward equatorial plane
+    
+    // If satellite is near equatorial plane, adjust tangential direction
+    if (Math.abs(satZ) < r * 0.1) { // Within 10% of equatorial plane
+        // Tangential component becomes negligible near equator
+        tangentialComponent *= 0.1;
+        tangentialUnit[0] = -satY / Math.sqrt(satX*satX + satY*satY);
+        tangentialUnit[1] = satX / Math.sqrt(satX*satX + satY*satY);
+        tangentialUnit[2] = 0;
+    }
+    
+    // Total J2 acceleration vector
+    double j2AccelX = radialComponent * radialUnit[0] + tangentialComponent * tangentialUnit[0];
+    double j2AccelY = radialComponent * radialUnit[1] + tangentialComponent * tangentialUnit[1];
+    double j2AccelZ = radialComponent * radialUnit[2] + tangentialComponent * tangentialUnit[2];
+    
+    // Normalize the acceleration direction for display
+    double totalMagnitude = Math.sqrt(j2AccelX*j2AccelX + j2AccelY*j2AccelY + j2AccelZ*j2AccelZ);
+    if (totalMagnitude > 0) {
+        j2AccelX /= totalMagnitude;
+        j2AccelY /= totalMagnitude;
+        j2AccelZ /= totalMagnitude;
+    }
+    
+    // Scale vector length for visibility
+    double baseLength = 60;
+    double scaleFactor = Math.log10(j2Accel * 1e10 + 1) * 20;
+    double vectorLength = Math.min(baseLength + scaleFactor, 120);
+    
+    // Calculate end point of J2 vector (project 3D to 2D)
+    int vectorEndX = satScreenX + (int)(j2AccelX * vectorLength);
+    int vectorEndY = satScreenY - (int)(j2AccelY * vectorLength); // Flip Y for screen coordinates
+    
+    // Draw green J2 vector
+    g2d.setColor(Color.GREEN);
+    g2d.setStroke(new BasicStroke(3.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+    g2d.drawLine(satScreenX, satScreenY, vectorEndX, vectorEndY);
+    
+    drawArrowHead(g2d, satScreenX, satScreenY, vectorEndX, vectorEndY, Color.GREEN);
+    
+    // Add small green circle at satellite position
+    g2d.setColor(Color.GREEN);
+    g2d.fillOval(satScreenX - 2, satScreenY - 2, 4, 4);
+    
+    // Draw magnitude and direction info if vector is long enough
+    if (vectorLength > 70) {
+        g2d.setColor(Color.GREEN);
+        g2d.setFont(new Font("Arial", Font.BOLD, 10));
+        
+        // Show both magnitude and latitude for educational purposes
+        String latitudeDegrees = String.format("%.1f°", Math.toDegrees(latitude));
+        String magnitudeText = String.format("J2: %.2e m/s²", j2Accel);
+        String latitudeText = String.format("Lat: %s", latitudeDegrees);
+        
+        int textX = vectorEndX + 10;
+        int textY = vectorEndY - 5;
+        
+        // Keep text on screen
+        if (textX > 1100) textX = vectorEndX - 100;
+        if (textY < 15) textY = vectorEndY + 20;
+        
+        g2d.drawString(magnitudeText, textX, textY);
+        g2d.drawString(latitudeText, textX, textY + 12);
+        
+        // Add explanation of J2 direction based on latitude
+        String directionHint = "";
+        if (Math.abs(Math.toDegrees(latitude)) < 5) {
+            directionHint = "(Near equator)";
+        } else if (Math.toDegrees(latitude) > 60) {
+            directionHint = "(High north lat)";
+        } else if (Math.toDegrees(latitude) < -60) {
+            directionHint = "(High south lat)";
+        } else {
+            directionHint = String.format("(%s hemisphere)", Math.toDegrees(latitude) > 0 ? "North" : "South");
+        }
+        
+        g2d.setFont(new Font("Arial", Font.PLAIN, 9));
+        g2d.drawString(directionHint, textX, textY + 24);
+    }
+}
 }

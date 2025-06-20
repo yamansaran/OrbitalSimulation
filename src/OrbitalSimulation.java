@@ -78,6 +78,8 @@ public class OrbitalSimulation extends JFrame {
     // === ENHANCED: Lunar and Solar Effects System with Date/Time Control ===
     private boolean lunarEffectsEnabled = false;
     private boolean solarEffectsEnabled = false;
+    private boolean j2EffectsEnabled = false;
+    private boolean solarRadiationPressureEnabled = false;
     private long simulationStartTime;
     private double currentSimulationTime; // Current simulation time in seconds since Unix epoch
     private static final double LUNAR_ORBITAL_PERIOD = 29.530 * 24 * 3600;
@@ -454,6 +456,8 @@ public class OrbitalSimulation extends JFrame {
             lunarEffectsEnabled = false;
             solarEffectsEnabled = false;
             atmosphericDragEnabled = false;
+            j2EffectsEnabled = false;
+            solarRadiationPressureEnabled = false;
             currentSimulationTime = 0;
             
             setCelestialBody("Earth");
@@ -518,6 +522,10 @@ public class OrbitalSimulation extends JFrame {
     public void setAtmosphericDragEnabled(boolean atmosphericDragEnabled) { this.atmosphericDragEnabled = atmosphericDragEnabled; }
     public Color getDragColor() { return dragColor; }
     public void setDragColor(Color dragColor) { this.dragColor = dragColor; }
+    public boolean isJ2EffectsEnabled() { return j2EffectsEnabled; }
+    public void setJ2EffectsEnabled(boolean j2EffectsEnabled) { this.j2EffectsEnabled = j2EffectsEnabled; }
+    public boolean isSolarRadiationPressureEnabled() { return solarRadiationPressureEnabled; }
+    public void setSolarRadiationPressureEnabled(boolean solarRadiationPressureEnabled) { this.solarRadiationPressureEnabled = solarRadiationPressureEnabled; }
 
     
     // Lunar and Solar Effects Getters - UPDATED to use currentSimulationTime
@@ -1016,11 +1024,12 @@ public class OrbitalSimulation extends JFrame {
      * Creates a new satellite object with current orbital parameters
      */
     public void createSatellite() {
-    satellite = new Satellite(semiMajorAxis, eccentricity, inclination, 
-                            argumentOfPeriapsis, longitudeOfAscendingNode, trueAnomaly,
-                            gravitationalConstant, earthMass, lunarEffectsEnabled, 
-                            solarEffectsEnabled, atmosphericDragEnabled, this); // UPDATED: Added atmosphericDragEnabled parameter
-}
+        satellite = new Satellite(semiMajorAxis, eccentricity, inclination, 
+                                argumentOfPeriapsis, longitudeOfAscendingNode, trueAnomaly,
+                                gravitationalConstant, earthMass, lunarEffectsEnabled, 
+                                solarEffectsEnabled, atmosphericDragEnabled, 
+                                j2EffectsEnabled, solarRadiationPressureEnabled, this); // ADD solarRadiationPressureEnabled parameter
+    }
     
     /**
      * Starts the animation timer for smooth orbital motion display

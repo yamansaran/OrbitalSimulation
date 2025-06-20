@@ -9,14 +9,19 @@ public class Satellite {
     private double gravitationalConstant;
     private double earthMass;
     
-    // === ENHANCED: Lunar, Solar, and Atmospheric effects system with separate calculators ===
+    // === ENHANCED: Lunar, Solar, Atmospheric, and J2 effects system with separate calculators ===
     private boolean lunarEffectsEnabled;
     private boolean solarEffectsEnabled;
-    private boolean atmosphericDragEnabled; // NEW: Atmospheric drag toggle
+    private boolean atmosphericDragEnabled;
+    private boolean j2EffectsEnabled; // NEW: J2 oblateness toggle
     private OrbitalSimulation simulation; // Reference to get Moon/Sun position and time
     private LunarForceCalculator lunarCalculator; // Separate lunar force calculator
     private SolarForceCalculator solarCalculator; // Separate solar force calculator
-    private AtmosphericDragCalculator dragCalculator; // NEW: Separate atmospheric drag calculator
+    private AtmosphericDragCalculator dragCalculator; // Separate atmospheric drag calculator
+    private J2Calculator j2Calculator; // NEW: Separate J2 oblateness calculator
+    private boolean solarRadiationPressureEnabled;
+    private SolarRadiationPressureCalculator radiationCalculator;
+
     
     // Perturbation tracking for orbital element drift
     private double deltaOmega = 0; // Accumulated change in argument of periapsis
@@ -25,11 +30,14 @@ public class Satellite {
     
     /**
      * Constructor: Initialize satellite with orbital elements
+     * UPDATED: Now includes J2 effects parameter
      */
     public Satellite(double semiMajorAxis, double eccentricity, double inclination,
-                    double argumentOfPeriapsis, double longitudeOfAscendingNode, double trueAnomaly,
-                    double gravitationalConstant, double earthMass, boolean lunarEffectsEnabled, 
-                    boolean solarEffectsEnabled, boolean atmosphericDragEnabled, OrbitalSimulation simulation) {
+                double argumentOfPeriapsis, double longitudeOfAscendingNode, double trueAnomaly,
+                double gravitationalConstant, double earthMass, boolean lunarEffectsEnabled, 
+                boolean solarEffectsEnabled, boolean atmosphericDragEnabled, 
+                boolean j2EffectsEnabled, boolean solarRadiationPressureEnabled, // ADD THIS PARAMETER
+                OrbitalSimulation simulation) {
         this.a = semiMajorAxis;
         this.e = eccentricity;
         this.i = Math.toRadians(inclination);
@@ -40,13 +48,17 @@ public class Satellite {
         this.earthMass = earthMass;
         this.lunarEffectsEnabled = lunarEffectsEnabled;
         this.solarEffectsEnabled = solarEffectsEnabled;
-        this.atmosphericDragEnabled = atmosphericDragEnabled; // NEW
+        this.atmosphericDragEnabled = atmosphericDragEnabled;
+        this.j2EffectsEnabled = j2EffectsEnabled; // NEW: Store J2 effects toggle
+        this.solarRadiationPressureEnabled = solarRadiationPressureEnabled;
+        this.radiationCalculator = new SolarRadiationPressureCalculator();
         this.simulation = simulation;
         
         // Initialize force calculators
         this.lunarCalculator = new LunarForceCalculator();
         this.solarCalculator = new SolarForceCalculator();
-        this.dragCalculator = new AtmosphericDragCalculator(); // NEW
+        this.dragCalculator = new AtmosphericDragCalculator();
+        this.j2Calculator = new J2Calculator(); // NEW: Initialize J2 calculator
         
         // Calculate mean motion using Kepler's third law: n = √(μ/a³)
         double mu = gravitationalConstant * earthMass; // Standard gravitational parameter
@@ -55,7 +67,7 @@ public class Satellite {
     
     /**
      * Updates satellite position by advancing time
-     * Now includes lunar, solar, and atmospheric drag perturbations with enhanced adaptive integration
+     * Now includes lunar, solar, atmospheric drag, and J2 perturbations with enhanced adaptive integration
      * Optimized for extreme speeds up to 100,000x
      */
     public void updatePosition(double deltaTime) {
@@ -83,7 +95,7 @@ public class Satellite {
     
     /**
      * === ENHANCED: Performs a single integration step ===
-     * Now includes atmospheric drag perturbations
+     * Now includes J2 oblateness perturbations
      */
     private void updateSingleStep(double deltaTime) {
         // Store original orbital elements for perturbation calculations
@@ -101,15 +113,21 @@ public class Satellite {
         M += meanMotion * deltaTime;
         
         // === Apply perturbations if enabled (before updating position) ===
-        if ((lunarEffectsEnabled || solarEffectsEnabled || atmosphericDragEnabled) && simulation != null) {
+        if ((lunarEffectsEnabled || solarEffectsEnabled || atmosphericDragEnabled || j2EffectsEnabled) && simulation != null) {
             if (lunarEffectsEnabled) {
                 lunarCalculator.applyPerturbations(this, deltaTime, simulation);
             }
             if (solarEffectsEnabled) {
                 solarCalculator.applyPerturbations(this, deltaTime, simulation);
             }
-            if (atmosphericDragEnabled) { // NEW: Apply atmospheric drag
+            if (atmosphericDragEnabled) {
                 dragCalculator.applyPerturbations(this, deltaTime, simulation);
+            }
+            if (j2EffectsEnabled) { // NEW: Apply J2 oblateness perturbations
+                j2Calculator.applyPerturbations(this, deltaTime, simulation);
+            }
+            if (solarRadiationPressureEnabled) {
+            radiationCalculator.applyPerturbations(this, deltaTime, simulation);
             }
         }
         
@@ -194,6 +212,7 @@ public class Satellite {
     public double getInclination() { return i; }
     public double getEccentricity() { return e; }
     public double getEarthMass() { return earthMass; }
+    public double getSemiMajorAxis() { return a; } // NEW: Needed by J2Calculator
     
     /**
      * === NEW: Getter for atmospheric drag acceleration (for display purposes) ===
@@ -202,6 +221,52 @@ public class Satellite {
         if (!atmosphericDragEnabled || dragCalculator == null) return 0;
         return dragCalculator.getCurrentDragAcceleration(this, simulation);
     }
+    
+    /**
+     * === NEW: Getter for J2 acceleration (for display purposes) ===
+     */
+    public double getJ2Acceleration() {
+        if (!j2EffectsEnabled || j2Calculator == null) return 0;
+        return j2Calculator.getCurrentJ2Acceleration(this, simulation);
+    }
+    
+    /**
+     * === NEW: Getter for J2 precession rates (for display purposes) ===
+     * Returns [nodal_precession_rate, apsidal_precession_rate] in degrees per day
+     */
+    public double[] getJ2Rates() {
+        if (!j2EffectsEnabled || j2Calculator == null) return new double[]{0, 0};
+        return j2Calculator.getCurrentJ2Rates(this, simulation);
+    }
+    
+    /**
+     * === NEW: Check if J2 effects are significant for this orbit ===
+     */
+    public boolean areJ2EffectsSignificant() {
+        if (!j2EffectsEnabled || j2Calculator == null) return false;
+        return j2Calculator.areJ2EffectsSignificant(this, simulation);
+    }
+    
+    /**
+     * === NEW: Get description of J2 effects for this orbit ===
+     */
+    public String getJ2EffectsDescription() {
+        if (!j2EffectsEnabled || j2Calculator == null) return "J2 effects disabled";
+        return j2Calculator.getJ2EffectsDescription(this, simulation);
+    }
+
+    public double getRadiationPressureAcceleration() {
+    if (!solarRadiationPressureEnabled || radiationCalculator == null) return 0;
+    return radiationCalculator.getCurrentRadiationAcceleration(this, simulation);
+    }
+
+    public SolarRadiationPressureCalculator.ShadowCondition getShadowCondition() {
+        if (!solarRadiationPressureEnabled || radiationCalculator == null) 
+            return new SolarRadiationPressureCalculator.ShadowCondition(
+                SolarRadiationPressureCalculator.ShadowType.DIRECT_SUNLIGHT, 0);
+        return radiationCalculator.getCurrentShadowCondition(this, simulation);
+    }
+
     
     /**
      * === NEW: Adjustment methods for orbital elements (used by force calculators) ===
