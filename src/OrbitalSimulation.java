@@ -15,6 +15,11 @@ import java.time.format.DateTimeFormatter;
 
 /*
  * Orbital Mechanics Simulation Program By Yaman Saran
+ * This program simulates the orbit of a satelite using 
+ * keplerian dynamics, with non keplerian purtorbing effects 
+ * avialable for added accuracy
+ * 
+ * Thanks to jacobwilliams for the HWM14 model Fortran codebase
  */
 public class OrbitalSimulation extends JFrame {
     // Window dimensions and layout constants
@@ -80,6 +85,8 @@ public class OrbitalSimulation extends JFrame {
     private boolean solarEffectsEnabled = false;
     private boolean j2EffectsEnabled = false;
     private boolean solarRadiationPressureEnabled = false;
+    private boolean thermosphericWindsEnabled = false;  
+    private ThermosphericWindCalculator thermosphericWindCalculator;
     private long simulationStartTime;
     private double currentSimulationTime; // Current simulation time in seconds since Unix epoch
     private static final double LUNAR_ORBITAL_PERIOD = 29.530 * 24 * 3600;
@@ -92,6 +99,9 @@ public class OrbitalSimulation extends JFrame {
     private static final double SUN_MASS = 1.989e30;
     private Color sunColor = new Color(255, 255, 0);
     private JLabel dateTimeLabel;
+    private double[] cachedThermosphericWinds = new double[]{0.0, 0.0, 0.0};
+    private long lastWindUpdate = 0;
+    private static final long WIND_UPDATE_INTERVAL = 1000; // Update every 1 second (1000ms)
     
     // Available satellite types
     private static final String[] SATELLITE_TYPES = {
@@ -147,6 +157,9 @@ public class OrbitalSimulation extends JFrame {
         // Initialize dialog manager
         dialogManager = new OrbitalDialogManager(this);
         
+        // Initialize thermospheric winds calculator
+        initializeThermosphericWinds();
+
         // Initialize GUI components and create initial satellite
         initializeComponents();
         loadCelestialBodyImage();
@@ -154,7 +167,19 @@ public class OrbitalSimulation extends JFrame {
         createSatellite();
         startAnimation();
     }
-    
+    private void initializeThermosphericWinds() {
+        try {
+            thermosphericWindCalculator = new ThermosphericWindCalculator();
+            if (thermosphericWindCalculator.isAvailable()) {
+                System.out.println("HWM14 Thermospheric Wind Model initialized successfully");
+            } else {
+                System.out.println("HWM14 not available: " + thermosphericWindCalculator.getStatusInfo());
+            }
+        } catch (Exception e) {
+            System.out.println("Error initializing HWM14: " + e.getMessage());
+            thermosphericWindCalculator = null;
+        }
+    }
     /**
      * Sets up the main window layout with simulation panel and control panel
      */
@@ -458,6 +483,7 @@ public class OrbitalSimulation extends JFrame {
             atmosphericDragEnabled = false;
             j2EffectsEnabled = false;
             solarRadiationPressureEnabled = false;
+            thermosphericWindsEnabled = false;
             currentSimulationTime = 0;
             
             setCelestialBody("Earth");
@@ -526,7 +552,25 @@ public class OrbitalSimulation extends JFrame {
     public void setJ2EffectsEnabled(boolean j2EffectsEnabled) { this.j2EffectsEnabled = j2EffectsEnabled; }
     public boolean isSolarRadiationPressureEnabled() { return solarRadiationPressureEnabled; }
     public void setSolarRadiationPressureEnabled(boolean solarRadiationPressureEnabled) { this.solarRadiationPressureEnabled = solarRadiationPressureEnabled; }
-
+    
+    // Thermospheric winds methods
+    public void setThermosphericWindsEnabled(boolean enabled) {
+        this.thermosphericWindsEnabled = enabled;
+    }
+    
+    public boolean isThermosphericWindsEnabled() {
+        return thermosphericWindsEnabled;
+    }
+    
+    public double[] getThermosphericWinds() {
+    if (!thermosphericWindsEnabled || thermosphericWindCalculator == null) {
+        return new double[]{0.0, 0.0, 0.0};
+    }
+    
+    
+    
+    return cachedThermosphericWinds;
+}
     
     // Lunar and Solar Effects Getters - UPDATED to use currentSimulationTime
     public boolean isLunarEffectsEnabled() { return lunarEffectsEnabled; }
@@ -1023,12 +1067,13 @@ public class OrbitalSimulation extends JFrame {
     /**
      * Creates a new satellite object with current orbital parameters
      */
-    public void createSatellite() {
+     public void createSatellite() {
         satellite = new Satellite(semiMajorAxis, eccentricity, inclination, 
                                 argumentOfPeriapsis, longitudeOfAscendingNode, trueAnomaly,
                                 gravitationalConstant, earthMass, lunarEffectsEnabled, 
                                 solarEffectsEnabled, atmosphericDragEnabled, 
-                                j2EffectsEnabled, solarRadiationPressureEnabled, this); // ADD solarRadiationPressureEnabled parameter
+                                j2EffectsEnabled, solarRadiationPressureEnabled, 
+                                thermosphericWindsEnabled, this); // ADD thermosphericWindsEnabled parameter
     }
     
     /**

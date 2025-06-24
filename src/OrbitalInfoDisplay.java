@@ -115,6 +115,7 @@ public class OrbitalInfoDisplay {
             infoList.add(String.format("Nodal Precession: %.3f°/day", j2Rates[0]));
             infoList.add(String.format("Apsidal Precession: %.3f°/day", j2Rates[1]));
         }
+        
         if (simulation.isSolarRadiationPressureEnabled()) {
         double radiationAccel = satellite.getRadiationPressureAcceleration();
         SolarRadiationPressureCalculator.ShadowCondition shadowCondition = satellite.getShadowCondition();
@@ -129,6 +130,20 @@ public class OrbitalInfoDisplay {
         if (radiationAccel <= 0) {
             infoList.add("SRP: N/A (in shadow)");
         }
+
+          // Simple thermospheric winds display
+           
+           // Thermospheric winds - text display only (no HWM14 calls during paint)
+        if (simulation.isThermosphericWindsEnabled()) {
+            // Get cached wind data from satellite (updated during physics, not during paint)
+            double windAccel = satellite.getThermosphericWindAcceleration(); // We'll add this simple method
+            if (windAccel > 0) {
+                infoList.add(String.format("Thermospheric Wind Effect: %.3e m/s²", windAccel));
+            } else {
+                infoList.add("Thermospheric Winds: Active (calculating...)");
+            }
+        }
+            
 }
 
         
@@ -153,6 +168,31 @@ public class OrbitalInfoDisplay {
             infoList.add("Drag: N/A (outside atmosphere)");
         }
     }
+
+    /**
+     * Adds thermospheric winds information to the info list
+     */
+    //BUG: FREEZES WHEN ENABLED
+    /* 
+    private void addThermosphericWindsInfo(List<String> infoList, Satellite satellite, double altitude) {
+        // Get current thermospheric winds
+        double[] winds = simulation.getThermosphericWinds();
+        
+        if (winds[0] != 0.0 || winds[1] != 0.0) {
+            // Calculate wind speed magnitude
+            double windSpeed = Math.sqrt(winds[0] * winds[0] + winds[1] * winds[1]);
+            
+            // Get wind acceleration from satellite (you'll need to add this method to Satellite)
+            double windAccel = satellite.getThermosphericWindAcceleration();
+            
+            infoList.add(String.format("Thermospheric Wind Accel: %.3e m/s²", windAccel));
+            infoList.add(String.format("Wind Speed: %.1f m/s (N:%.1f, E:%.1f)", windSpeed, winds[0], winds[1]));
+            infoList.add(String.format("Wind Effect Altitude: %.1f km", altitude));
+        } else {
+            infoList.add("Thermospheric Winds: N/A (no wind data)");
+        }
+    }
+    */
     
     /**
      * Adds celestial body position information to the info list
@@ -203,6 +243,8 @@ public class OrbitalInfoDisplay {
         if (simulation.isSolarEffectsEnabled()) activeEffects.add("Solar");
         if (simulation.isAtmosphericDragEnabled()) activeEffects.add("Drag");
         if (simulation.isSolarRadiationPressureEnabled()) activeEffects.add("Radiation");
+        //BUG: FREEZES WHEN ENABLED
+        if (simulation.isThermosphericWindsEnabled()) activeEffects.add("Winds");
 
         if (!activeEffects.isEmpty()) {
             g2d.setColor(Color.YELLOW);
@@ -221,6 +263,9 @@ public class OrbitalInfoDisplay {
             }
             if (simulation.isJ2EffectsEnabled()) {
             vectorInfo.add("Green line = J2 oblateness");
+            }
+            if (simulation.isThermosphericWindsEnabled()) {   
+                vectorInfo.add("Purple line = Thermospheric winds");
             }
             if (!vectorInfo.isEmpty()) {
                 String vectorText = String.join(", ", vectorInfo);

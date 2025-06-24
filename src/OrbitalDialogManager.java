@@ -332,231 +332,305 @@ public class OrbitalDialogManager {
     /**
      * Shows the Non-Keplerian Effects configuration dialog
      */
-     public void showNonKeplerianEffectsDialog() {
-        JDialog dialog = new JDialog(simulation, "Non-Keplerian Effects", true);
-        dialog.setSize(500, 500); // Increased height to accommodate Solar Radiation Pressure checkbox
-        dialog.setLocationRelativeTo(simulation);
-        
-        JPanel panel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(10, 10, 10, 10);
-        gbc.anchor = GridBagConstraints.WEST;
-        
-        // Lunar effects toggle
-        JCheckBox lunarEffectsBox = new JCheckBox("Enable Lunar Gravitational Effects", simulation.isLunarEffectsEnabled());
-        
-        // Solar effects toggle
-        JCheckBox solarEffectsBox = new JCheckBox("Enable Solar Gravitational Effects", simulation.isSolarEffectsEnabled());
+     /**
+ * Shows the Non-Keplerian Effects configuration dialog
+ */
+public void showNonKeplerianEffectsDialog() {
+    JDialog dialog = new JDialog(simulation, "Non-Keplerian Effects", true);
+    dialog.setSize(500, 600); // Increased height for new checkbox
+    dialog.setLocationRelativeTo(simulation);
+    
+    JPanel panel = new JPanel(new GridBagLayout());
+    GridBagConstraints gbc = new GridBagConstraints();
+    gbc.insets = new Insets(10, 10, 10, 10);
+    gbc.anchor = GridBagConstraints.WEST;
+    
+    // Lunar effects toggle
+    JCheckBox lunarEffectsBox = new JCheckBox("Enable Lunar Gravitational Effects", simulation.isLunarEffectsEnabled());
+    
+    // Solar effects toggle
+    JCheckBox solarEffectsBox = new JCheckBox("Enable Solar Gravitational Effects", simulation.isSolarEffectsEnabled());
 
-        // Atmospheric drag toggle
-        JCheckBox atmosphericDragBox = new JCheckBox("Enable Atmospheric Drag Effects", simulation.isAtmosphericDragEnabled());
+    // Atmospheric drag toggle
+    JCheckBox atmosphericDragBox = new JCheckBox("Enable Atmospheric Drag Effects", simulation.isAtmosphericDragEnabled());
 
-        // J2 oblateness effects toggle
-        JCheckBox j2EffectsBox = new JCheckBox("Enable J2 Oblateness Effects", simulation.isJ2EffectsEnabled());
-        
-        // NEW: Solar radiation pressure effects toggle
-        JCheckBox solarRadiationBox = new JCheckBox("Enable Solar Radiation Pressure", simulation.isSolarRadiationPressureEnabled());
-        
-        gbc.gridy = 0;
-        gbc.gridx = 0;
-        gbc.gridwidth = 2;
-        panel.add(lunarEffectsBox, gbc);
-        
-        gbc.gridy = 1;
-        panel.add(solarEffectsBox, gbc);
+    // J2 oblateness effects toggle
+    JCheckBox j2EffectsBox = new JCheckBox("Enable J2 Oblateness Effects", simulation.isJ2EffectsEnabled());
+    
+    // Solar radiation pressure effects toggle
+    JCheckBox solarRadiationBox = new JCheckBox("Enable Solar Radiation Pressure", simulation.isSolarRadiationPressureEnabled());
+    
+    // NEW: Thermospheric winds effects toggle
+    JCheckBox thermosphericWindsBox = new JCheckBox("Enable Thermospheric Winds (HWM14)", simulation.isThermosphericWindsEnabled());
+    
+    gbc.gridy = 0;
+    gbc.gridx = 0;
+    gbc.gridwidth = 2;
+    panel.add(lunarEffectsBox, gbc);
+    
+    gbc.gridy = 1;
+    panel.add(solarEffectsBox, gbc);
 
-        gbc.gridy = 2;
-        panel.add(atmosphericDragBox, gbc);
+    gbc.gridy = 2;
+    panel.add(atmosphericDragBox, gbc);
 
-        gbc.gridy = 3;
-        panel.add(j2EffectsBox, gbc);
+    gbc.gridy = 3;
+    panel.add(j2EffectsBox, gbc);
 
-        gbc.gridy = 4; // NEW: Add Solar Radiation Pressure checkbox
-        panel.add(solarRadiationBox, gbc);
+    gbc.gridy = 4;
+    panel.add(solarRadiationBox, gbc);
+
+    gbc.gridy = 5; // NEW: Add thermospheric winds checkbox
+    panel.add(thermosphericWindsBox, gbc);
+    
+    // Information about effects
+    gbc.gridy = 6; // Updated row number
+    gbc.gridwidth = 2;
+    JTextArea infoArea = new JTextArea(22, 40); // Increased height
+    infoArea.setEditable(false);
+    infoArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+    
+    // Update info based on current selections
+    ActionListener updateInfo = e -> {
+        StringBuilder info = new StringBuilder();
         
-        // Information about effects
-        gbc.gridy = 5; // Updated row number
-        gbc.gridwidth = 2;
-        JTextArea infoArea = new JTextArea(20, 40); // Increased height
-        infoArea.setEditable(false);
-        infoArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        if (lunarEffectsBox.isSelected()) {
+            info.append("LUNAR GRAVITATIONAL EFFECTS:\n");
+            info.append("• Moon orbits Earth every 29.530 days\n");
+            info.append("• Started at 84.7° east on Jan 1, 1970\n");
+            info.append("• Causes orbital plane precession\n");
+            info.append("• Affects argument of periapsis\n");
+            info.append("• Induces inclination oscillations\n");
+            double moonAngle = (84.7 + (simulation.getCurrentSimulationTime() / (29.530 * 24 * 3600)) * 360.0) % 360.0;
+            info.append(String.format("• Current Moon Position: %.1f°\n", moonAngle));
+            info.append("\n");
+        }
         
-        // Update info based on current selections
-        ActionListener updateInfo = e -> {
-            StringBuilder info = new StringBuilder();
-            
-            if (lunarEffectsBox.isSelected()) {
-                info.append("LUNAR GRAVITATIONAL EFFECTS:\n");
-                info.append("• Moon orbits Earth every 29.530 days\n");
-                info.append("• Started at 84.7° east on Jan 1, 1970\n");
-                info.append("• Causes orbital plane precession\n");
-                info.append("• Affects argument of periapsis\n");
-                info.append("• Induces inclination oscillations\n");
-                double moonAngle = (84.7 + (simulation.getCurrentSimulationTime() / (29.530 * 24 * 3600)) * 360.0) % 360.0;
-                info.append(String.format("• Current Moon Position: %.1f°\n", moonAngle));
-                info.append("\n");
+        if (solarEffectsBox.isSelected()) {
+            info.append("SOLAR GRAVITATIONAL EFFECTS:\n");
+            info.append("• Sun has apparent 1-year orbital period\n");
+            info.append("• Started at 281° on Jan 1, 1970\n");
+            info.append("• Causes long-term orbital evolution\n");
+            info.append("• Affects eccentricity and inclination\n");
+            info.append("• Stronger effects on high-altitude satellites\n");
+            double sunAngle = (281.0 + (simulation.getCurrentSimulationTime() / (365.25 * 24 * 3600)) * 360.0) % 360.0;
+            info.append(String.format("• Current Sun Position: %.1f°\n", sunAngle));
+            info.append("\n");
+        }
+
+        if (atmosphericDragBox.isSelected()) {
+            info.append("ATMOSPHERIC DRAG EFFECTS:\n");
+            info.append("• Active between 80-1000 km altitude\n");
+            info.append("• Opposes satellite velocity direction\n");
+            info.append("• Causes orbital decay (energy loss)\n");
+            info.append("• Circularizes orbits (reduces eccentricity)\n");
+            info.append("• Most significant for LEO satellites\n");
+            info.append("• Uses CD = 2.2, Area = 10 m², Mass = 1000 kg\n");
+            info.append("• Gray acceleration vector will be displayed\n");
+            info.append("  showing drag force direction\n");
+            info.append("\n");
+        }
+
+        if (j2EffectsBox.isSelected()) {
+            info.append("J2 OBLATENESS EFFECTS:\n");
+            info.append("• Earth's oblate shape perturbations\n");
+            info.append("• Nodal precession (orbital plane rotation)\n");
+            info.append("• Apsidal precession (ellipse orientation)\n");
+            info.append("• Most significant for low altitude orbits\n");
+            info.append("• Strongest perturbation for most satellites\n");
+            info.append("• J2 = 1.08263×10⁻³ for Earth\n");
+            info.append("• Green acceleration vector displayed\n");
+            info.append("• Enables sun-synchronous orbit analysis\n");
+            info.append("\n");
+        }
+
+        if (solarRadiationBox.isSelected()) {
+            info.append("SOLAR RADIATION PRESSURE EFFECTS:\n");
+            info.append("• Photon momentum transfer from sunlight\n");
+            info.append("• Only active when satellite is in sunlight\n");
+            info.append("• Accounts for umbra and penumbra shadows\n");
+            info.append("• Depends on satellite area and reflectivity\n");
+            info.append("• Area = 10 m², Reflectivity = 60%\n");
+            info.append("• Includes 11-year solar cycle variations\n");
+            info.append("• Orange acceleration vector displayed\n");
+            info.append("• Shows eclipse effects on orbital evolution\n");
+            info.append("• Most significant for high area-to-mass ratio\n");
+            info.append("\n");
+        }
+
+        // NEW: Thermospheric winds effects information
+        if (thermosphericWindsBox.isSelected()) {
+            info.append("THERMOSPHERIC WINDS EFFECTS (HWM14):\n");
+            info.append("• Horizontal Wind Model 2014 integration\n");
+            info.append("• Realistic thermospheric wind patterns\n");
+            info.append("• Modifies atmospheric drag calculations\n");
+            info.append("• Most significant at 150-500 km altitude\n");
+            info.append("• Includes day/night and seasonal variations\n");
+            info.append("• Accounts for geomagnetic activity effects\n");
+            info.append("• Purple wind vector displayed when active\n");
+            info.append("• Requires hwm123114.bin data file\n");
+            // Check HWM14 availability
+            try {
+                ThermosphericWindCalculator windCalc = new ThermosphericWindCalculator();
+                if (windCalc.isAvailable()) {
+                    info.append("• Status: HWM14 model ready\n");
+                } else {
+                    info.append("• Status: HWM14 data files not found\n");
+                }
+            } catch (Exception ex) {
+                info.append("• Status: HWM14 initialization error\n");
             }
+            info.append("\n");
+        }
+        
+        if (!lunarEffectsBox.isSelected() && !solarEffectsBox.isSelected() && 
+            !atmosphericDragBox.isSelected() && !j2EffectsBox.isSelected() && 
+            !solarRadiationBox.isSelected() && !thermosphericWindsBox.isSelected()) { // Added thermospheric winds
+            info.append("NON-KEPLERIAN EFFECTS DISABLED\n\n");
+            info.append("When enabled, these effects simulate:\n");
+            info.append("• Third-body gravitational perturbations\n");
+            info.append("• Atmospheric drag forces\n");
+            info.append("• Earth oblateness effects\n");
+            info.append("• Solar radiation pressure\n");
+            info.append("• Thermospheric wind patterns\n"); // NEW
+            info.append("• Orbital element evolution over time\n");
+            info.append("• Realistic satellite orbital mechanics\n\n");
+            info.append("Effects are most noticeable on:\n");
+            info.append("• High-altitude satellites (GEO, HEO)\n");
+            info.append("• Low-altitude satellites (LEO for drag/J2/winds)\n"); // Updated
+            info.append("• Eccentric orbits\n");
+            info.append("• Inclined orbital planes\n");
+            info.append("• Satellites with large solar panels\n");
+        }
+        
+        // Combined effects information
+        int enabledCount = 0;
+        if (lunarEffectsBox.isSelected()) enabledCount++;
+        if (solarEffectsBox.isSelected()) enabledCount++;
+        if (atmosphericDragBox.isSelected()) enabledCount++;
+        if (j2EffectsBox.isSelected()) enabledCount++;
+        if (solarRadiationBox.isSelected()) enabledCount++;
+        if (thermosphericWindsBox.isSelected()) enabledCount++; // NEW
+        
+        if (enabledCount > 1) {
+            info.append("COMBINED EFFECTS:\n");
+            info.append("• Complex multi-body dynamics\n");
+            info.append("• Realistic orbital evolution\n");
+            info.append("• Multiple acceleration vectors displayed:\n");
             
-            if (solarEffectsBox.isSelected()) {
-                info.append("SOLAR GRAVITATIONAL EFFECTS:\n");
-                info.append("• Sun has apparent 1-year orbital period\n");
-                info.append("• Started at 281° on Jan 1, 1970\n");
-                info.append("• Causes long-term orbital evolution\n");
-                info.append("• Affects eccentricity and inclination\n");
-                info.append("• Stronger effects on high-altitude satellites\n");
-                double sunAngle = (281.0 + (simulation.getCurrentSimulationTime() / (365.25 * 24 * 3600)) * 360.0) % 360.0;
-                info.append(String.format("• Current Sun Position: %.1f°\n", sunAngle));
-                info.append("\n");
+            if (lunarEffectsBox.isSelected() || solarEffectsBox.isSelected()) {
+                info.append("  - Blue: Gravitational forces\n");
             }
-
             if (atmosphericDragBox.isSelected()) {
-                info.append("ATMOSPHERIC DRAG EFFECTS:\n");
-                info.append("• Active between 80-1000 km altitude\n");
-                info.append("• Opposes satellite velocity direction\n");
-                info.append("• Causes orbital decay (energy loss)\n");
-                info.append("• Circularizes orbits (reduces eccentricity)\n");
-                info.append("• Most significant for LEO satellites\n");
-                info.append("• Uses CD = 2.2, Area = 10 m², Mass = 1000 kg\n");
-                info.append("• Gray acceleration vector will be displayed\n");
-                info.append("  showing drag force direction\n");
-                info.append("\n");
+                info.append("  - Gray: Atmospheric drag\n");
             }
-
             if (j2EffectsBox.isSelected()) {
-                info.append("J2 OBLATENESS EFFECTS:\n");
-                info.append("• Earth's oblate shape perturbations\n");
-                info.append("• Nodal precession (orbital plane rotation)\n");
-                info.append("• Apsidal precession (ellipse orientation)\n");
-                info.append("• Most significant for low altitude orbits\n");
-                info.append("• Strongest perturbation for most satellites\n");
-                info.append("• J2 = 1.08263×10⁻³ for Earth\n");
-                info.append("• Green acceleration vector displayed\n");
-                info.append("• Enables sun-synchronous orbit analysis\n");
-                info.append("\n");
+                info.append("  - Green: J2 oblateness\n");
             }
-
-            // NEW: Solar radiation pressure effects information
             if (solarRadiationBox.isSelected()) {
-                info.append("SOLAR RADIATION PRESSURE EFFECTS:\n");
-                info.append("• Photon momentum transfer from sunlight\n");
-                info.append("• Only active when satellite is in sunlight\n");
-                info.append("• Accounts for umbra and penumbra shadows\n");
-                info.append("• Depends on satellite area and reflectivity\n");
-                info.append("• Area = 10 m², Reflectivity = 60%\n");
-                info.append("• Includes 11-year solar cycle variations\n");
-                info.append("• Orange acceleration vector displayed\n");
-                info.append("• Shows eclipse effects on orbital evolution\n");
-                info.append("• Most significant for high area-to-mass ratio\n");
-                info.append("\n");
+                info.append("  - Orange: Solar radiation pressure\n");
             }
-            
-            if (!lunarEffectsBox.isSelected() && !solarEffectsBox.isSelected() && 
-                !atmosphericDragBox.isSelected() && !j2EffectsBox.isSelected() && 
-                !solarRadiationBox.isSelected()) { // Added solarRadiationBox
-                info.append("NON-KEPLERIAN EFFECTS DISABLED\n\n");
-                info.append("When enabled, these effects simulate:\n");
-                info.append("• Third-body gravitational perturbations\n");
-                info.append("• Atmospheric drag forces\n");
-                info.append("• Earth oblateness effects\n");
-                info.append("• Solar radiation pressure\n"); // NEW
-                info.append("• Orbital element evolution over time\n");
-                info.append("• Realistic satellite orbital mechanics\n\n");
-                info.append("Effects are most noticeable on:\n");
-                info.append("• High-altitude satellites (GEO, HEO)\n");
-                info.append("• Low-altitude satellites (LEO for drag/J2)\n");
-                info.append("• Eccentric orbits\n");
-                info.append("• Inclined orbital planes\n");
-                info.append("• Satellites with large solar panels\n"); // NEW
+            if (thermosphericWindsBox.isSelected()) { // NEW
+                info.append("  - Purple: Thermospheric winds\n");
             }
-            
-            // Combined effects information
-            int enabledCount = 0;
-            if (lunarEffectsBox.isSelected()) enabledCount++;
-            if (solarEffectsBox.isSelected()) enabledCount++;
-            if (atmosphericDragBox.isSelected()) enabledCount++;
-            if (j2EffectsBox.isSelected()) enabledCount++;
-            if (solarRadiationBox.isSelected()) enabledCount++; // NEW
-            
-            if (enabledCount > 1) {
-                info.append("COMBINED EFFECTS:\n");
-                info.append("• Complex multi-body dynamics\n");
-                info.append("• Realistic orbital evolution\n");
-                info.append("• Multiple acceleration vectors displayed:\n");
-                
-                if (lunarEffectsBox.isSelected() || solarEffectsBox.isSelected()) {
-                    info.append("  - Blue: Gravitational forces\n");
+            info.append("• Professional orbital mechanics simulation\n");
+        }
+        
+        infoArea.setText(info.toString());
+    };
+    
+    lunarEffectsBox.addActionListener(updateInfo);
+    solarEffectsBox.addActionListener(updateInfo);
+    atmosphericDragBox.addActionListener(updateInfo);
+    j2EffectsBox.addActionListener(updateInfo);
+    solarRadiationBox.addActionListener(updateInfo);
+    thermosphericWindsBox.addActionListener(updateInfo); // NEW: Add listener for thermospheric winds
+    
+    // NEW: Add special listener for thermospheric winds to check HWM14 availability
+    thermosphericWindsBox.addActionListener(e -> {
+        if (thermosphericWindsBox.isSelected()) {
+            try {
+                ThermosphericWindCalculator windCalc = new ThermosphericWindCalculator();
+                if (!windCalc.isAvailable()) {
+                    JOptionPane.showMessageDialog(dialog,
+                        "HWM14 thermospheric wind model is not available.\n\n" +
+                        "Required files:\n" +
+                        "• hwm123114.bin (main data file)\n" +
+                        "• hwm14jni.dll (JNI library)\n\n" +
+                        "Please ensure these files are in the program directory.\n\n" +
+                        "Status: " + windCalc.getStatusInfo(),
+                        "HWM14 Not Available",
+                        JOptionPane.WARNING_MESSAGE);
+                    thermosphericWindsBox.setSelected(false);
                 }
-                if (atmosphericDragBox.isSelected()) {
-                    info.append("  - Gray: Atmospheric drag\n");
-                }
-                if (j2EffectsBox.isSelected()) {
-                    info.append("  - Green: J2 oblateness\n");
-                }
-                if (solarRadiationBox.isSelected()) { // NEW
-                    info.append("  - Orange: Solar radiation pressure\n");
-                }
-                info.append("• Professional orbital mechanics simulation\n");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog,
+                    "Error checking HWM14 availability:\n" + ex.getMessage(),
+                    "HWM14 Error",
+                    JOptionPane.ERROR_MESSAGE);
+                thermosphericWindsBox.setSelected(false);
             }
-            
-            infoArea.setText(info.toString());
-        };
+        }
+    });
+    
+    updateInfo.actionPerformed(null); // Initial update
+    
+    JScrollPane infoScroll = new JScrollPane(infoArea);
+    panel.add(infoScroll, gbc);
+    
+    // Buttons
+    JPanel buttonPanel = new JPanel();
+    JButton okButton = new JButton("OK");
+    JButton cancelButton = new JButton("Cancel");
+    
+    okButton.addActionListener(e -> {
+        boolean oldLunarEffects = simulation.isLunarEffectsEnabled();
+        boolean oldSolarEffects = simulation.isSolarEffectsEnabled();
+        boolean oldAtmosphericDrag = simulation.isAtmosphericDragEnabled();
+        boolean oldJ2Effects = simulation.isJ2EffectsEnabled();
+        boolean oldSolarRadiation = simulation.isSolarRadiationPressureEnabled();
+        boolean oldThermosphericWinds = simulation.isThermosphericWindsEnabled(); // NEW
         
-        lunarEffectsBox.addActionListener(updateInfo);
-        solarEffectsBox.addActionListener(updateInfo);
-        atmosphericDragBox.addActionListener(updateInfo);
-        j2EffectsBox.addActionListener(updateInfo);
-        solarRadiationBox.addActionListener(updateInfo); // NEW: Add listener for Solar Radiation Pressure
-        updateInfo.actionPerformed(null); // Initial update
+        simulation.setLunarEffectsEnabled(lunarEffectsBox.isSelected());
+        simulation.setSolarEffectsEnabled(solarEffectsBox.isSelected());
+        simulation.setAtmosphericDragEnabled(atmosphericDragBox.isSelected());
+        simulation.setJ2EffectsEnabled(j2EffectsBox.isSelected());
+        simulation.setSolarRadiationPressureEnabled(solarRadiationBox.isSelected());
+        simulation.setThermosphericWindsEnabled(thermosphericWindsBox.isSelected()); // NEW
         
-        JScrollPane infoScroll = new JScrollPane(infoArea);
-        panel.add(infoScroll, gbc);
+        // If any effects were toggled, update the satellite
+        if (oldLunarEffects != simulation.isLunarEffectsEnabled() || 
+            oldSolarEffects != simulation.isSolarEffectsEnabled() ||
+            oldAtmosphericDrag != simulation.isAtmosphericDragEnabled() ||
+            oldJ2Effects != simulation.isJ2EffectsEnabled() ||
+            oldSolarRadiation != simulation.isSolarRadiationPressureEnabled() ||
+            oldThermosphericWinds != simulation.isThermosphericWindsEnabled()) { // NEW
+            simulation.createSatellite();
+            simulation.getSimulationPanel().repaint();
+        }
         
-        // Buttons
-        JPanel buttonPanel = new JPanel();
-        JButton okButton = new JButton("OK");
-        JButton cancelButton = new JButton("Cancel");
+        // Show status message if thermospheric winds are enabled
+        if (thermosphericWindsBox.isSelected() && !oldThermosphericWinds) {
+            System.out.println("Thermospheric winds enabled - HWM14 model active");
+        }
         
-        okButton.addActionListener(e -> {
-            boolean oldLunarEffects = simulation.isLunarEffectsEnabled();
-            boolean oldSolarEffects = simulation.isSolarEffectsEnabled();
-            boolean oldAtmosphericDrag = simulation.isAtmosphericDragEnabled();
-            boolean oldJ2Effects = simulation.isJ2EffectsEnabled();
-            boolean oldSolarRadiation = simulation.isSolarRadiationPressureEnabled(); // NEW
-            
-            simulation.setLunarEffectsEnabled(lunarEffectsBox.isSelected());
-            simulation.setSolarEffectsEnabled(solarEffectsBox.isSelected());
-            simulation.setAtmosphericDragEnabled(atmosphericDragBox.isSelected());
-            simulation.setJ2EffectsEnabled(j2EffectsBox.isSelected());
-            simulation.setSolarRadiationPressureEnabled(solarRadiationBox.isSelected()); // NEW
-            
-            // If any effects were toggled, update the satellite
-            if (oldLunarEffects != simulation.isLunarEffectsEnabled() || 
-                oldSolarEffects != simulation.isSolarEffectsEnabled() ||
-                oldAtmosphericDrag != simulation.isAtmosphericDragEnabled() ||
-                oldJ2Effects != simulation.isJ2EffectsEnabled() ||
-                oldSolarRadiation != simulation.isSolarRadiationPressureEnabled()) { // NEW
-                simulation.createSatellite();
-                simulation.getSimulationPanel().repaint();
-            }
-            
-            dialog.dispose();
-        });
-        
-        cancelButton.addActionListener(e -> dialog.dispose());
-        
-        buttonPanel.add(okButton);
-        buttonPanel.add(cancelButton);
-        
-        gbc.gridy = 6; // Updated row number
-        gbc.gridx = 0;
-        gbc.gridwidth = 2;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(buttonPanel, gbc);
-        
-        dialog.add(panel);
-        dialog.setVisible(true);
-    }
-
+        dialog.dispose();
+    });
+    
+    cancelButton.addActionListener(e -> dialog.dispose());
+    
+    buttonPanel.add(okButton);
+    buttonPanel.add(cancelButton);
+    
+    gbc.gridy = 7; // Updated row number
+    gbc.gridx = 0;
+    gbc.gridwidth = 2;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    panel.add(buttonPanel, gbc);
+    
+    dialog.add(panel);
+    dialog.setVisible(true);
+}
     
     /**
      * Shows the orbital parameters configuration dialog

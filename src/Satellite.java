@@ -36,7 +36,7 @@ public class Satellite {
                 double argumentOfPeriapsis, double longitudeOfAscendingNode, double trueAnomaly,
                 double gravitationalConstant, double earthMass, boolean lunarEffectsEnabled, 
                 boolean solarEffectsEnabled, boolean atmosphericDragEnabled, 
-                boolean j2EffectsEnabled, boolean solarRadiationPressureEnabled, // ADD THIS PARAMETER
+                boolean j2EffectsEnabled, boolean solarRadiationPressureEnabled, boolean thermosphericWindsEnabled,
                 OrbitalSimulation simulation) {
         this.a = semiMajorAxis;
         this.e = eccentricity;
@@ -414,5 +414,15 @@ public class Satellite {
         }
         
         return E;
+    }
+
+    /**
+     * Get the acceleration magnitude due to thermospheric winds
+     */
+    public double getThermosphericWindAcceleration() {
+        // This should calculate the actual acceleration magnitude
+        // You may need to add this calculation to your wind force calculation
+        // For now, return a placeholder
+        return 0.0; // You'll need to implement this based on your wind force calculation
     }
 }
